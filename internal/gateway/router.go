@@ -15,13 +15,8 @@ import (
 
 const drainTimeout = 5 * time.Second
 
-type Account struct {
-	Bridge   core.Bridge
-	Platform string
-}
-
 type Router struct {
-	accounts map[string]Account
+	accounts map[string]*Account
 	routes   map[core.Address][]core.Address
 	channels map[string][]core.ChannelSpec // account -> channels to join
 	queues   map[core.Address]chan core.Event
@@ -34,7 +29,7 @@ type Router struct {
 	timeout time.Duration
 }
 
-func New(cfg config.Config, ledger core.Ledger, accounts map[string]Account, media core.Media, log *slog.Logger) (*Router, error) {
+func New(cfg config.Config, ledger core.Ledger, accounts map[string]*Account, media core.Media, log *slog.Logger) (*Router, error) {
 	for _, gw := range cfg.Gateways {
 		for _, c := range gw.Channels {
 			if _, ok := accounts[c.Account]; !ok {
@@ -75,8 +70,7 @@ func (r *Router) Run(ctx context.Context) error {
 
 	var workers, ingests, managers sync.WaitGroup
 	for addr, queue := range r.queues {
-		bridge := r.accounts[addr.Account].Bridge
-		workers.Go(func() { r.worker(delivery, addr, bridge, queue) })
+		workers.Go(func() { r.worker(delivery, addr, queue) })
 	}
 	for name, acc := range r.accounts {
 		if _, used := r.channels[name]; !used {

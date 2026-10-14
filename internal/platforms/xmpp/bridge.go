@@ -38,6 +38,7 @@ type Bridge struct {
 	Server   string        `toml:"server,commented" comment:"connect address host:port, required for component, else SRV lookup"`
 	Nick     string        `toml:"nick,commented" comment:"bot nickname in rooms, defaults to jid localpart"`
 
+	conn    net.Conn
 	session *xmpp.Session
 	addr    jid.JID // configured jid (component domain or account)
 	self    jid.JID // what we put in outgoing "from"
@@ -90,11 +91,11 @@ func (b *Bridge) Open(ctx context.Context) error {
 		}
 	}
 
-	var conn net.Conn
 	if b.Server != "" {
-		conn, err = net.DialTimeout("tcp", b.Server, dialTimeout)
+		dialer := net.Dialer{Timeout: dialTimeout}
+		b.conn, err = dialer.DialContext(ctx, "tcp", b.Server)
 	} else {
-		conn, err = dial.Client(ctx, "tcp", b.addr)
+		b.conn, err = dial.Client(ctx, "tcp", b.addr)
 	}
 	if err != nil {
 		return err
@@ -102,7 +103,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 
 	if b.isComponent() {
 		b.self, _ = jid.New(b.botNick(), b.addr.Domainpart(), "")
-		b.session, err = component.NewSession(ctx, b.addr, []byte(b.Password), conn)
+		b.session, err = component.NewSession(ctx, b.addr, []byte(b.Password), b.conn)
 	} else {
 		b.self = b.addr
 		features := []xmpp.StreamFeature{
@@ -110,9 +111,10 @@ func (b *Bridge) Open(ctx context.Context) error {
 			xmpp.SASL("", string(b.Password), sasl.ScramSha256, sasl.ScramSha1, sasl.Plain),
 			xmpp.BindResource(),
 		}
-		b.session, err = xmpp.NewClientSession(ctx, b.addr, conn, features...)
+		b.session, err = xmpp.NewClientSession(ctx, b.addr, b.conn, features...)
 	}
 	if err != nil {
+		b.conn.Close()
 		return fmt.Errorf("%w: %w", err, core.ErrPermanent) // server rejected our stream
 	}
 
@@ -134,7 +136,9 @@ func (b *Bridge) Close() error {
 	if b.alive.Load() {
 		b.leaveAll()
 	}
-	return b.session.Close()
+	err := b.session.Close()
+	b.conn.Close()
+	return err
 }
 
 func (b *Bridge) serve() {

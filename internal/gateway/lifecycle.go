@@ -14,7 +14,7 @@ const (
 )
 
 func (r *Router) manage(ctx context.Context, account string, ch <-chan core.Status, drained <-chan struct{}) {
-	b := r.accounts[account].Bridge
+	acc := r.accounts[account]
 	var delay time.Duration
 
 	for {
@@ -29,7 +29,7 @@ func (r *Router) manage(ctx context.Context, account string, ch <-chan core.Stat
 			return
 		}
 
-		if err := b.Open(ctx); err != nil {
+		if err := acc.open(ctx); err != nil {
 			if errors.Is(err, core.ErrPermanent) {
 				r.log.Error("connect failed, giving up", "account", account, "err", err)
 				return
@@ -52,7 +52,7 @@ func (r *Router) manage(ctx context.Context, account string, ch <-chan core.Stat
 }
 
 func (r *Router) close(account string) {
-	if err := r.accounts[account].Bridge.Close(); err != nil {
+	if err := r.accounts[account].close(); err != nil {
 		r.log.Warn("close bridge", "account", account, "err", err)
 	}
 }

@@ -16,6 +16,8 @@ func TestStripFallback(t *testing.T) {
 		{"quote prefix", "> bob: hi\nhello", reply(r(0, 10)), "hello"},
 		{"runes not bytes", "> ö\nhi", reply(r(0, 4)), "hi"},
 		{"multiple ranges", "aXXbYYc", reply(r(1, 3), r(4, 6)), "abc"},
+		{"overlapping ranges", "0123456789", reply(r(5, 10), r(0, 8)), ""},
+		{"nested ranges", "aXYZb", reply(r(1, 4), r(2, 3)), "ab"},
 		{"no range strips all", "> quote", reply(fallbackBody{}), ""},
 		{"out of bounds ignored", "hi", reply(r(0, 10)), "hi"},
 		{"other namespace ignored", "> q\nhi", []fallback{{For: "urn:other", Body: []fallbackBody{r(0, 4)}}}, "> q\nhi"},

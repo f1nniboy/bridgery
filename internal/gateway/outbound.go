@@ -7,21 +7,29 @@ import (
 	"github.com/f1nniboy/bridgery/internal/hook"
 )
 
-func (r *Router) worker(ctx context.Context, dst core.Address, b core.Bridge, q <-chan core.Event) {
+func (r *Router) worker(ctx context.Context, dst core.Address, q <-chan core.Event) {
 	var dropped int
 	for ev := range q {
 		if ctx.Err() != nil {
 			dropped++
 			continue
 		}
-		r.deliver(ctx, dst, b, ev)
+		r.deliver(ctx, dst, ev)
 	}
 	if dropped > 0 {
 		r.log.Warn("shutdown timed out, dropped queued events", "dst", dst, "count", dropped)
 	}
 }
 
-func (r *Router) deliver(ctx context.Context, dst core.Address, b core.Bridge, ev core.Event) {
+func (r *Router) deliver(ctx context.Context, dst core.Address, ev core.Event) {
+	acc := r.accounts[dst.Account]
+	if !acc.acquire() {
+		r.log.Warn("account not connected, dropping event", "dst", dst, "kind", ev.Kind)
+		return
+	}
+	defer acc.release()
+	b := acc.Bridge
+
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 

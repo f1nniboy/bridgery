@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/xml"
-	"slices"
 
 	"mellium.im/xmpp/jid"
 	"mellium.im/xmpp/stanza"
@@ -213,7 +212,7 @@ type outPresence struct {
 
 func stripFallback(text string, fbs []fallback) string {
 	runes := []rune(text)
-	var ranges [][2]int
+	var drop []bool
 	for _, fb := range fbs {
 		if fb.For != nsReply {
 			continue
@@ -223,19 +222,25 @@ func stripFallback(text string, fbs []fallback) string {
 				return "" // whole body is reply fallback
 			}
 			s, e := *b.Start, *b.End
-			if s < 0 || e <= s || s > len(runes) || e > len(runes) {
+			if s < 0 || e <= s || e > len(runes) {
 				continue
 			}
-			ranges = append(ranges, [2]int{s, e})
+			if drop == nil {
+				drop = make([]bool, len(runes))
+			}
+			for i := s; i < e; i++ {
+				drop[i] = true
+			}
 		}
 	}
-	if len(ranges) == 0 {
+	if drop == nil {
 		return text
 	}
-	slices.SortFunc(ranges, func(a, b [2]int) int { return b[0] - a[0] })
-	out := runes
-	for _, r := range ranges {
-		out = append(out[:r[0]], out[r[1]:]...)
+	out := make([]rune, 0, len(runes))
+	for i, r := range runes {
+		if !drop[i] {
+			out = append(out, r)
+		}
 	}
 	return string(out)
 }

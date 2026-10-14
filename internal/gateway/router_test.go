@@ -51,10 +51,10 @@ func newRouter(t *testing.T) *Router {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Router{ledger: l, accounts: map[string]Account{
+	return &Router{ledger: l, accounts: map[string]*Account{
 		"discord": {Platform: "discord"},
 		"irc":     {Platform: "irc"},
-	}}
+	}, log: slog.New(slog.DiscardHandler)}
 }
 
 func inbound(kind core.Kind, native, text string) core.Inbound {
@@ -206,4 +206,9 @@ func TestLowerFallback(t *testing.T) {
 	if d.Fallback {
 		t.Error("plain post marked as fallback")
 	}
+}
+
+func TestDeliverSkipsDisconnectedAccount(t *testing.T) {
+	r := newRouter(t)
+	r.deliver(t.Context(), irc, core.Event{Kind: core.KindPost})
 }

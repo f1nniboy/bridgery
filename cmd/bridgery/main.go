@@ -54,7 +54,7 @@ func run() error {
 		return fmt.Errorf("open media: %w", err)
 	}
 
-	accounts := make(map[string]gateway.Account)
+	accounts := make(map[string]*gateway.Account)
 	for platform, labels := range cfg.Accounts {
 		newBridge, ok := platforms.Registry[platform]
 		if !ok {
@@ -66,7 +66,7 @@ func run() error {
 			if err := config.Decode(bytes.NewReader(raw), b); err != nil {
 				return fmt.Errorf("account %q: %w", id, err)
 			}
-			accounts[id] = gateway.Account{Bridge: b, Platform: platform}
+			accounts[id] = &gateway.Account{Bridge: b, Platform: platform}
 		}
 	}
 	if len(accounts) == 0 {
