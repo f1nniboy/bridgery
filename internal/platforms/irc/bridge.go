@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ergochat/irc-go/ircevent"
+	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/ergochat/irc-go/ircmsg"
 
 	"github.com/f1nniboy/bridgery/internal/config"
@@ -199,7 +200,7 @@ func (b *Bridge) onMessage(msg ircmsg.Message) {
 		Origin:   core.Address{Channel: b.channel(msg.Params[0])},
 		NativeID: id,
 		ParentID: parent,
-		Message:  core.Message{Author: core.Author{ID: nick, Name: nick}, Content: span.Plain(msg.Params[1])},
+		Message:  core.Message{Author: core.Author{ID: nick, Name: nick}, Content: span.Plain(ircfmt.Strip(msg.Params[1]))},
 	})
 }
 
