@@ -39,7 +39,7 @@ A channel can also be one-directional with `mode`:
 
 ```toml
 [accounts.discord.main]
-token = 'Bot MTEyMzQ1Nj...'
+token = 'Bot ${DISCORD_TOKEN}'
 
 [accounts.irc.libera]
 server = 'irc.libera.chat'
@@ -59,6 +59,12 @@ nick = 'mybridge'
 That's a working bridge, but without hooks IRC sees each message with no author (see step 4).
 
 See [docs/platforms](platforms) for what every platform can and can't do, and how to set them up.
+
+### Secrets
+
+Tokens, passwords, and keys can be read from the environment instead of written into the config: `${NAME}` in one of those values is replaced with the corresponding environment variable, as with `DISCORD_TOKEN` above.
+
+With Docker, put the variables in a `.env` file next to `docker-compose.yml` and uncomment the `env_file` line.
 
 ## 4. Hooks (recommended)
 

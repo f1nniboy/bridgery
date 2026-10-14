@@ -26,7 +26,7 @@ func buildChannels(defs []config.Gateway) map[string][]core.ChannelSpec {
 				continue
 			}
 			seen[c.Account][c.Channel] = true
-			channels[c.Account] = append(channels[c.Account], core.ChannelSpec{Name: c.Channel, Key: c.Key})
+			channels[c.Account] = append(channels[c.Account], core.ChannelSpec{Name: c.Channel, Key: string(c.Key)})
 		}
 	}
 	return channels

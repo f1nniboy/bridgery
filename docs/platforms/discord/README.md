@@ -20,5 +20,5 @@
 ```toml
 [accounts.discord.mydiscord]
 # Discord bot token (include Bot prefix)
-token = 'Bot MTEyMzQ1Nj...'
+token = 'Bot ${DISCORD_TOKEN}'
 ```

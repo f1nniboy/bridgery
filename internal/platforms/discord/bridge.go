@@ -8,6 +8,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 
+	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/span"
 )
@@ -15,7 +16,7 @@ import (
 type Bridge struct {
 	*core.Common `toml:"-"`
 
-	Token string `toml:"token" comment:"Discord bot token (include Bot prefix)"`
+	Token config.Secret `toml:"token" comment:"Discord bot token (include Bot prefix)"`
 
 	session *discordgo.Session
 	mu      sync.Mutex
@@ -25,7 +26,7 @@ type Bridge struct {
 func (b *Bridge) Name() string { return "Discord" }
 
 func (b *Bridge) Example() core.Bridge {
-	return &Bridge{Token: "Bot MTEyMzQ1Nj..."}
+	return &Bridge{Token: "Bot ${DISCORD_TOKEN}"}
 }
 
 func (b *Bridge) Caps() core.CapSet {
@@ -33,7 +34,7 @@ func (b *Bridge) Caps() core.CapSet {
 }
 
 func (b *Bridge) Open(ctx context.Context) error {
-	s, err := discordgo.New(b.Token)
+	s, err := discordgo.New(string(b.Token))
 	if err != nil {
 		return err
 	}

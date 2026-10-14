@@ -12,6 +12,7 @@ import (
 	"github.com/ergochat/irc-go/ircevent"
 	"github.com/ergochat/irc-go/ircmsg"
 
+	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/span"
 )
@@ -32,14 +33,14 @@ const sendDelay = 1000 * time.Millisecond
 type Bridge struct {
 	*core.Common `toml:"-"`
 
-	Server   string `toml:"server" comment:"host[:port]"`
-	TLS      bool   `toml:"tls" comment:"connect with TLS (default port 6697, else 6667)"`
-	Nick     string `toml:"nick" comment:"nickname"`
-	User     string `toml:"user,commented" comment:"username, defaults to nick"`
-	RealName string `toml:"realname,commented" comment:"real name, defaults to nick"`
-	SASLUser string `toml:"sasl_user,commented" comment:"SASL account for authentication"`
-	SASLPass string `toml:"sasl_pass,commented" comment:"SASL password"`
-	Password string `toml:"password,commented" comment:"server password (PASS)"`
+	Server   string        `toml:"server" comment:"host[:port]"`
+	TLS      bool          `toml:"tls" comment:"connect with TLS (default port 6697, else 6667)"`
+	Nick     string        `toml:"nick" comment:"nickname"`
+	User     string        `toml:"user,commented" comment:"username, defaults to nick"`
+	RealName string        `toml:"realname,commented" comment:"real name, defaults to nick"`
+	SASLUser string        `toml:"sasl_user,commented" comment:"SASL account for authentication"`
+	SASLPass config.Secret `toml:"sasl_pass,commented" comment:"SASL password"`
+	Password config.Secret `toml:"password,commented" comment:"server password (PASS)"`
 
 	conn     *ircevent.Connection
 	throttle *time.Ticker
@@ -96,7 +97,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 		Nick:        b.Nick,
 		User:        user,
 		RealName:    real,
-		Password:    b.Password,
+		Password:    string(b.Password),
 		RequestCaps: requestCaps,
 		UseTLS:      b.TLS,
 	}
@@ -106,7 +107,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 	if b.SASLUser != "" {
 		b.conn.UseSASL = true
 		b.conn.SASLLogin = b.SASLUser
-		b.conn.SASLPassword = b.SASLPass
+		b.conn.SASLPassword = string(b.SASLPass)
 	}
 	b.conn.Log = slog.NewLogLogger(b.Log.Handler(), slog.LevelWarn)
 	b.throttle = time.NewTicker(sendDelay)

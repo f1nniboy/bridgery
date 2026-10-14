@@ -19,6 +19,7 @@ import (
 	"mellium.im/xmpp/jid"
 	"mellium.im/xmpp/stanza"
 
+	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/span"
 )
@@ -32,10 +33,10 @@ const (
 type Bridge struct {
 	*core.Common `toml:"-"`
 
-	JID      string `toml:"jid" comment:"component domain (puppet mode) or user@domain (normal mode)"`
-	Password string `toml:"password" comment:"component secret (puppet mode) or account password (normal mode)"`
-	Server   string `toml:"server,commented" comment:"connect address host:port, required for component, else SRV lookup"`
-	Nick     string `toml:"nick,commented" comment:"bot nickname in rooms, defaults to jid localpart"`
+	JID      string        `toml:"jid" comment:"component domain (puppet mode) or user@domain (normal mode)"`
+	Password config.Secret `toml:"password" comment:"component secret (puppet mode) or account password (normal mode)"`
+	Server   string        `toml:"server,commented" comment:"connect address host:port, required for component, else SRV lookup"`
+	Nick     string        `toml:"nick,commented" comment:"bot nickname in rooms, defaults to jid localpart"`
 
 	session *xmpp.Session
 	addr    jid.JID // configured jid (component domain or account)
@@ -106,7 +107,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 		b.self = b.addr
 		features := []xmpp.StreamFeature{
 			xmpp.StartTLS(&tls.Config{ServerName: b.addr.Domainpart()}),
-			xmpp.SASL("", b.Password, sasl.ScramSha256, sasl.ScramSha1, sasl.Plain),
+			xmpp.SASL("", string(b.Password), sasl.ScramSha256, sasl.ScramSha1, sasl.Plain),
 			xmpp.BindResource(),
 		}
 		b.session, err = xmpp.NewClientSession(ctx, b.addr, conn, features...)

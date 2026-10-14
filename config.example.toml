@@ -68,7 +68,7 @@ channel = '#mychannel'
 [accounts.discord]
 [accounts.discord.main]
 # Discord bot token (include Bot prefix)
-token = 'Bot MTEyMzQ1Nj...'
+token = 'Bot ${DISCORD_TOKEN}'
 
 [accounts.irc]
 [accounts.irc.libera]

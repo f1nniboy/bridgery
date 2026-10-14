@@ -8,16 +8,18 @@ import (
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
+
+	"github.com/f1nniboy/bridgery/internal/config"
 )
 
 type s3 struct {
-	Endpoint  string `toml:"endpoint,commented" comment:"S3 host, no scheme"`
-	Region    string `toml:"region,commented" comment:"bucket region"`
-	Bucket    string `toml:"bucket,commented"`
-	AccessKey string `toml:"access_key,commented"`
-	SecretKey string `toml:"secret_key,commented"`
-	BaseURL   string `toml:"base_url,commented" comment:"public base URL serving the bucket (CDN or public endpoint)\nyou make the bucket publicly readable yourself"`
-	Insecure  bool   `toml:"insecure,commented" comment:"use http instead of https (local testing)"`
+	Endpoint  string        `toml:"endpoint,commented" comment:"S3 host, no scheme"`
+	Region    string        `toml:"region,commented" comment:"bucket region"`
+	Bucket    string        `toml:"bucket,commented"`
+	AccessKey config.Secret `toml:"access_key,commented"`
+	SecretKey config.Secret `toml:"secret_key,commented"`
+	BaseURL   string        `toml:"base_url,commented" comment:"public base URL serving the bucket (CDN or public endpoint)\nyou make the bucket publicly readable yourself"`
+	Insecure  bool          `toml:"insecure,commented" comment:"use http instead of https (local testing)"`
 
 	client *minio.Client
 }
@@ -27,7 +29,7 @@ func (s *s3) Open() error {
 		return errors.New("backend requires endpoint, bucket, and base_url")
 	}
 	client, err := minio.New(s.Endpoint, &minio.Options{
-		Creds:  credentials.NewStaticV4(s.AccessKey, s.SecretKey, ""),
+		Creds:  credentials.NewStaticV4(string(s.AccessKey), string(s.SecretKey), ""),
 		Secure: !s.Insecure,
 		Region: s.Region,
 	})

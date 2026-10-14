@@ -39,7 +39,7 @@ type Channel struct {
 	Channel string `toml:"channel"`
 	Mode    string `toml:"mode,commented" comment:"in: write-only, messages are never relayed here\nout: read-only, messages sent here are never relayed\ninout (default): normal"`
 
-	Key string `toml:"key,commented" comment:"bridge-specific join secret (e.g. IRC)"`
+	Key Secret `toml:"key,commented" comment:"bridge-specific join secret (e.g. IRC)"`
 }
 
 func (c Channel) Sources() bool  { return c.Mode != "out" }

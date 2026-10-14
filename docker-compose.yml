@@ -2,6 +2,7 @@ services:
   bridgery:
     image: ghcr.io/f1nniboy/bridgery:latest
     restart: unless-stopped
+    # env_file: .env
     volumes:
       - ./config.toml:/etc/bridgery/config.toml:ro,z
       # - ./hooks:/hooks:ro,z
