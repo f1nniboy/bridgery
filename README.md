@@ -1,9 +1,15 @@
+<div align="center">
+
+<img src="assets/logo.svg" alt="" width="160">
+
 # bridgery
 
 *A hackable bridge for chat platforms*
 
 [![release](https://img.shields.io/github/v/release/f1nniboy/bridgery?color=blue)](https://github.com/f1nniboy/bridgery/releases)
 [![license](https://img.shields.io/github/license/f1nniboy/bridgery?color=blue)](LICENSE)
+
+</div>
 
 **bridgery** relays messages between chat platforms, so people on Discord, IRC, and elsewhere can all chat with eachother.
 
@@ -31,4 +37,11 @@ Read the **[setup guide](docs/SETUP.md)** for a walkthrough.
 
 ## Related projects
 
-- **[matterbridge](https://github.com/42wim/matterbridge)** (and [the fork](https://github.com/matterbridge-org/matterbridge)): obviously, pretty much the only mature cross-platform bridge to date
+- **[matterbridge](https://github.com/42wim/matterbridge)** (and [the fork](https://github.com/matterbridge-org/matterbridge)): pretty much the only mature cross-platform bridge to date
+
+## Credits
+
+### Logo
+
+- Go gopher by [Renée French](https://reneefrench.blogspot.com/), licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
+- Gopher artwork from [gopher-vector](https://github.com/golang-samples/gopher-vector) by Takuya Ueda, licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/)
