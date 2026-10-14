@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLoadExample(t *testing.T) {
@@ -55,5 +56,27 @@ func TestDecodeRejectsUnknownFields(t *testing.T) {
 	err := Decode(strings.NewReader("size = 1\nsiez = 2\n[extra]\nx = 1"), &v)
 	if err == nil || err.Error() != "unknown field siez, extra" {
 		t.Errorf("got %v", err)
+	}
+}
+
+func TestDurationText(t *testing.T) {
+	cases := []struct {
+		in   time.Duration
+		want string
+	}{
+		{0, "0s"},
+		{30 * time.Second, "30s"},
+		{90 * time.Second, "1m30s"},
+		{time.Minute, "1m"},
+		{24 * time.Hour, "24h"},
+		{90 * time.Minute, "1h30m"},
+		{time.Hour + time.Second, "1h0m1s"},
+	}
+	for _, c := range cases {
+		b, _ := Duration(c.in).MarshalText()
+		var back Duration
+		if err := back.UnmarshalText(b); err != nil || string(b) != c.want || time.Duration(back) != c.in {
+			t.Errorf("%v: text %q (want %q), parsed back %v, %v", c.in, b, c.want, time.Duration(back), err)
+		}
 	}
 }

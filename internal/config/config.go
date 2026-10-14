@@ -65,7 +65,14 @@ func (d *Duration) UnmarshalText(b []byte) error {
 }
 
 func (d Duration) MarshalText() ([]byte, error) {
-	return []byte(time.Duration(d).String()), nil
+	s := time.Duration(d).String()
+	if strings.HasSuffix(s, "m0s") {
+		s = strings.TrimSuffix(s, "0s")
+	}
+	if strings.HasSuffix(s, "h0m") {
+		s = strings.TrimSuffix(s, "0m")
+	}
+	return []byte(s), nil
 }
 
 func Default() Config {
