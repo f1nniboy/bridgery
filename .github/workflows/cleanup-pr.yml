@@ -1,0 +1,16 @@
+name: Cleanup PR Docker images
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  ghcr:
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: step-security/ghcr-cleanup-action@v1
+        with:
+          delete-tags: "pr-${{ github.event.pull_request.number }}"

@@ -1,0 +1,90 @@
+[log]
+# debug, info, warn, or error
+# level = 'info'
+# text or json
+# format = 'text'
+
+[runtime]
+# per-destination max queued messages
+# you probably won't have to change this
+# queue_size = 256
+# per-delivery timeout
+# timeout = '30s'
+
+[hooks]
+# directory of Lua scripts, omit to disable
+# dir = 'hooks'
+
+[[gateways]]
+# channels relayed to each other
+[[gateways.channels]]
+account = 'discord.main'
+channel = '123456789012345678'
+# in: write-only, messages are never relayed here
+# out: read-only, messages sent here are never relayed
+# inout (default): normal
+# mode = ''
+# bridge-specific join secret (e.g. IRC)
+# key = ''
+
+[[gateways.channels]]
+account = 'irc.libera'
+channel = '#mychannel'
+# in: write-only, messages are never relayed here
+# out: read-only, messages sent here are never relayed
+# inout (default): normal
+# mode = ''
+# bridge-specific join secret (e.g. IRC)
+# key = ''
+
+# [ledger]
+# [ledger.memory]
+# max cached messages, 0 for unbounded
+# max_size = 10000
+
+# [media]
+# [media.local]
+# directory to write re-hosted files into
+# dir = '/var/lib/bridgery/media'
+# public base URL serving that directory
+# you serve this directory yourself with a web server
+# base_url = 'https://domain.tld/media'
+
+# [media.s3]
+# S3 host, no scheme
+# endpoint = 's3.amazonaws.com'
+# bucket region
+# region = 'us-east-1'
+# bucket = 'my-bucket'
+# access_key = ''
+# secret_key = ''
+# public base URL serving the bucket (CDN or public endpoint)
+# you make the bucket publicly readable yourself
+# base_url = 'https://cdn.example.com'
+# use http instead of https (local testing)
+# insecure = false
+
+[accounts]
+[accounts.discord]
+[accounts.discord.main]
+# Discord bot token (include Bot prefix)
+token = 'Bot MTEyMzQ1Nj...'
+
+[accounts.irc]
+[accounts.irc.libera]
+# host[:port]
+server = 'irc.libera.chat'
+# connect with TLS (default port 6697, else 6667)
+tls = true
+# nickname
+nick = 'mybot'
+# username, defaults to nick
+# user = ''
+# real name, defaults to nick
+# realname = ''
+# SASL account for authentication
+# sasl_user = ''
+# SASL password
+# sasl_pass = ''
+# server password (PASS)
+# password = ''

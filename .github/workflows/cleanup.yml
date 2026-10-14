@@ -1,0 +1,20 @@
+name: Cleanup Docker images
+
+on:
+  schedule:
+    - cron: "0 4 * * 1"
+  workflow_dispatch:
+
+jobs:
+  ghcr:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: step-security/ghcr-cleanup-action@v1
+        with:
+          delete-untagged: true
+          delete-partial-images: true
+          keep-n-tagged: 30
+          exclude-tags: "latest,main,*.*"
+          validate: true

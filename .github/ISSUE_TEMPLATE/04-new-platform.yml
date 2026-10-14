@@ -1,0 +1,28 @@
+name: New platform request
+description: Suggest a chat platform to bridge
+labels: [platform, feat]
+body:
+  - type: input
+    id: name
+    attributes:
+      label: Platform name
+    validations:
+      required: true
+  - type: textarea
+    id: reason
+    attributes:
+      label: Why add it?
+      description: What does this platform offer, and would people actually use it?
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+  - type: checkboxes
+    id: help
+    attributes:
+      label: Can you help?
+      options:
+        - label: I can help test this bridge against the platform regularly
+        - label: I can help maintain the bridge code

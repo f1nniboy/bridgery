@@ -1,0 +1,40 @@
+name: Bug report
+description: Report a bug
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened and what did you expect?
+      placeholder: "The gateway drops messages when ..."
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Bridge a Discord channel to an IRC channel
+        2. Send a message on Discord
+        3. Observe nothing arrives on IRC
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The version or commit you're running
+      placeholder: "v0.1.0 or abc1234"
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Relevant logs with debug level enabled
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: Your config.toml (redact tokens/passwords!)
+      render: toml

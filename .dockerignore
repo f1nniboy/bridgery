@@ -1,0 +1,6 @@
+.git
+.github
+
+/config.toml
+/hooks/*
+!/hooks/examples/
