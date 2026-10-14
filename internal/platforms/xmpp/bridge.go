@@ -133,7 +133,7 @@ func (b *Bridge) Join(ch core.ChannelSpec) error {
 }
 
 func (b *Bridge) Close() error {
-	if b.alive.Load() {
+	if b.alive.Swap(false) {
 		b.leaveAll()
 	}
 	err := b.session.Close()
@@ -142,10 +142,11 @@ func (b *Bridge) Close() error {
 }
 
 func (b *Bridge) serve() {
-	if err := b.session.Serve(xmpp.HandlerFunc(b.handle)); err != nil {
-		b.Log.Warn("xmpp serve stopped", "err", err)
+	err := b.session.Serve(xmpp.HandlerFunc(b.handle))
+	if !b.alive.Swap(false) {
+		return // closed by us
 	}
-	b.alive.Store(false)
+	b.Log.Warn("xmpp connection lost", "err", err)
 	b.Report(core.Status{Event: core.Disconnected})
 }
 
