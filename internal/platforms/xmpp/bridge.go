@@ -26,9 +26,10 @@ import (
 )
 
 const (
-	dialTimeout = 10 * time.Second
-	echoTimeout = 10 * time.Second
-	iqTimeout   = 10 * time.Second
+	dialTimeout  = 10 * time.Second
+	echoTimeout  = 10 * time.Second
+	iqTimeout    = 10 * time.Second
+	writeTimeout = 10 * time.Second
 )
 
 type Bridge struct {
@@ -371,6 +372,12 @@ func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, er
 		return core.Receipt{}, b.session.Encode(ctx, outMessage{Message: base, Composing: &chatState{}})
 	}
 	return core.Receipt{}, nil
+}
+
+func (b *Bridge) write(v any) error {
+	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+	defer cancel()
+	return b.session.Encode(ctx, v)
 }
 
 func (b *Bridge) send(ctx context.Context, msg outMessage) (string, error) {

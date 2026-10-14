@@ -3,9 +3,12 @@ package discord
 import (
 	"context"
 	"errors"
+	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/gorilla/websocket"
 
 	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
@@ -32,7 +35,13 @@ func (b *Bridge) Caps() core.CapSet {
 	return core.Caps(core.CapEdit, core.CapDelete, core.CapTyping, core.CapPuppet, core.CapMedia)
 }
 
+// https://docs.discord.com/developers/topics/opcodes-and-status-codes#gateway-gateway-close-event-codes
+var permCloseCodes = []int{4004, 4010, 4011, 4012, 4013, 4014}
+
 func (b *Bridge) Open(ctx context.Context) error {
+	if b.Token == "" {
+		return fmt.Errorf("token is required: %w", core.ErrPermanent)
+	}
 	s, err := discordgo.New(string(b.Token))
 	if err != nil {
 		return err
@@ -45,7 +54,14 @@ func (b *Bridge) Open(ctx context.Context) error {
 	s.AddHandler(b.onUpdate)
 	s.AddHandler(b.onDelete)
 
-	return s.Open()
+	if err := s.Open(); err != nil {
+		var ce *websocket.CloseError
+		if errors.As(err, &ce) && slices.Contains(permCloseCodes, ce.Code) {
+			return fmt.Errorf("%w: %w", err, core.ErrPermanent)
+		}
+		return err
+	}
+	return nil
 }
 
 func (b *Bridge) self(id, webhookID string) bool {

@@ -37,6 +37,11 @@ func (r *Router) handle(in core.Inbound, account string) {
 			return // cancelled by hook
 		}
 	}
+	if ev.Kind == core.KindEdit {
+		if rec, found := r.ledger.Get(ev.ID); found && slices.Equal(rec.Content, ev.Content) {
+			return // edit with same content as before, so skip
+		}
+	}
 	if ev.Kind == core.KindPost || ev.Kind == core.KindEdit {
 		r.ledger.Put(ev.ID, stripData(ev.Message))
 	}
@@ -70,11 +75,6 @@ func (r *Router) lift(in core.Inbound) (core.Event, bool) {
 			return core.Event{}, false
 		}
 		ev.ID = id
-		if rec, found := r.ledger.Get(id); found {
-			if slices.Equal(rec.Content, in.Content) {
-				return core.Event{}, false // not a real edit
-			}
-		}
 
 	case core.KindDelete:
 		id, ok := r.ledger.Canonical(in.Origin, in.NativeID)

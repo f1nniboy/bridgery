@@ -4,9 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ergochat/irc-go/ircevent"
@@ -27,6 +30,12 @@ var requestCaps = []string{
 	"draft/message-redaction", // https://ircv3.net/specs/extensions/message-redaction
 }
 
+var rejections = []string{
+	ircevent.ERR_PASSWDMISMATCH,   // https://modern.ircdocs.horse/#errpasswdmismatch-464
+	ircevent.ERR_YOUREBANNEDCREEP, // https://modern.ircdocs.horse/#erryourebannedcreep-465
+	ircevent.ERR_SASLFAIL,         // https://modern.ircdocs.horse/#errsaslfail-904
+}
+
 const registerTimeout = 30 * time.Second
 const sendDelay = 1000 * time.Millisecond
 
@@ -44,6 +53,9 @@ type Bridge struct {
 
 	conn     *ircevent.Connection
 	throttle *time.Ticker
+
+	chanMu   sync.Mutex
+	channels map[string]string // casefolded name -> configured name
 }
 
 func (b *Bridge) Name() string { return "IRC" }
@@ -72,7 +84,7 @@ func (b *Bridge) Caps() core.CapSet {
 
 func (b *Bridge) Open(ctx context.Context) error {
 	if b.Nick == "" {
-		return errors.New("nick is required")
+		return fmt.Errorf("nick is required: %w", core.ErrPermanent)
 	}
 	host, port, err := net.SplitHostPort(b.Server)
 	if err != nil {
@@ -111,6 +123,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 	}
 	b.conn.Log = slog.NewLogLogger(b.Log.Handler(), slog.LevelWarn)
 	b.throttle = time.NewTicker(sendDelay)
+	b.channels = make(map[string]string)
 
 	ready := make(chan struct{}, 1)
 	b.conn.AddConnectCallback(func(ircmsg.Message) {
@@ -130,7 +143,15 @@ func (b *Bridge) Open(ctx context.Context) error {
 	b.conn.AddCallback("KICK", b.onKick)
 	b.conn.AddCallback("JOIN", b.onJoin)
 
+	var rejected atomic.Bool
+	for _, code := range rejections {
+		b.conn.AddCallback(code, func(ircmsg.Message) { rejected.Store(true) })
+	}
+
 	if err := b.conn.Connect(); err != nil {
+		if rejected.Load() || errors.Is(err, ircevent.SASLFailed) {
+			return fmt.Errorf("%w: %w", err, core.ErrPermanent)
+		}
 		return err
 	}
 	select {
@@ -147,6 +168,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 }
 
 func (b *Bridge) Join(ch core.ChannelSpec) error {
+	b.remember(ch.Name)
 	if ch.Key != "" {
 		return b.conn.Send("JOIN", ch.Name, ch.Key)
 	}
@@ -154,14 +176,14 @@ func (b *Bridge) Join(ch core.ChannelSpec) error {
 }
 
 func (b *Bridge) onKick(msg ircmsg.Message) {
-	if len(msg.Params) >= 2 && msg.Params[1] == b.conn.CurrentNick() {
-		b.Report(core.Status{Event: core.ChannelDown, Channel: msg.Params[0]})
+	if len(msg.Params) >= 2 && b.fold(msg.Params[1]) == b.fold(b.conn.CurrentNick()) {
+		b.Report(core.Status{Event: core.ChannelDown, Channel: b.channel(msg.Params[0])})
 	}
 }
 
 func (b *Bridge) onJoin(msg ircmsg.Message) {
 	if msg.Nick() == b.conn.CurrentNick() && len(msg.Params) >= 1 {
-		b.Report(core.Status{Event: core.ChannelUp, Channel: msg.Params[0]})
+		b.Report(core.Status{Event: core.ChannelUp, Channel: b.channel(msg.Params[0])})
 	}
 }
 
@@ -174,7 +196,7 @@ func (b *Bridge) onMessage(msg ircmsg.Message) {
 	_, parent := msg.GetTag("+draft/reply") // https://ircv3.net/specs/client-tags/reply
 	b.Send(core.Inbound{
 		Kind:     core.KindPost,
-		Origin:   core.Address{Channel: msg.Params[0]},
+		Origin:   core.Address{Channel: b.channel(msg.Params[0])},
 		NativeID: id,
 		ParentID: parent,
 		Message:  core.Message{Author: core.Author{ID: nick, Name: nick}, Content: span.Plain(msg.Params[1])},
@@ -191,7 +213,7 @@ func (b *Bridge) onTyping(msg ircmsg.Message) {
 	}
 	b.Send(core.Inbound{
 		Kind:    core.KindTyping,
-		Origin:  core.Address{Channel: msg.Params[0]},
+		Origin:  core.Address{Channel: b.channel(msg.Params[0])},
 		Message: core.Message{Author: core.Author{ID: nick, Name: nick}},
 	})
 }
@@ -202,7 +224,7 @@ func (b *Bridge) onRedact(msg ircmsg.Message) {
 	}
 	b.Send(core.Inbound{
 		Kind:     core.KindDelete,
-		Origin:   core.Address{Channel: msg.Params[0]},
+		Origin:   core.Address{Channel: b.channel(msg.Params[0])},
 		NativeID: msg.Params[1],
 	})
 }

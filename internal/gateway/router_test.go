@@ -1,7 +1,6 @@
 package gateway
 
 import (
-	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -98,14 +97,6 @@ func TestLift(t *testing.T) {
 		}
 	})
 
-	t.Run("edit with unchanged content is dropped", func(t *testing.T) {
-		r := newRouter(t)
-		relay(t, r, "d1", "i1")
-		if _, ok := r.lift(inbound(core.KindEdit, "d1", "hello")); ok {
-			t.Error("no-op edit not dropped")
-		}
-	})
-
 	t.Run("edit of an unknown message is dropped", func(t *testing.T) {
 		r := newRouter(t)
 		if _, ok := r.lift(inbound(core.KindEdit, "nope", "x")); ok {
@@ -185,17 +176,51 @@ func TestLower(t *testing.T) {
 	})
 }
 
-func TestLowerFallback(t *testing.T) {
+func withHook(t *testing.T, r *Router, script string) {
+	t.Helper()
 	dir := t.TempDir()
-	script := `on("deliver", function(ev, dst) if not dst:can("edit") then ev.kind = "post" end end)`
 	if err := os.WriteFile(filepath.Join(dir, "a.lua"), []byte(script), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	r := newRouter(t)
 	var err error
-	if r.hooks, err = hook.New(hook.Config{Dir: dir}, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+	if r.hooks, err = hook.New(hook.Config{Dir: dir}, slog.New(slog.DiscardHandler)); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func TestHandleEdits(t *testing.T) {
+	cases := []struct {
+		name, hook, edit string
+		relayed          bool
+	}{
+		{"unchanged", "", "hello", false},
+		{"changed", "", "hello there", true},
+		{"unchanged after receive hook", `on("receive", function(ev) ev:append("!") end)`, "hello", false},
+		{"changed after receive hook", `on("receive", function(ev) ev:append("!") end)`, "hi", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := newRouter(t)
+			if c.hook != "" {
+				withHook(t, r, c.hook)
+			}
+			q := make(chan core.Event, 2)
+			r.routes = map[core.Address][]core.Address{discord: {irc}}
+			r.queues = map[core.Address]chan core.Event{irc: q}
+
+			r.handle(inbound(core.KindPost, "d1", "hello"), "discord")
+			<-q
+			r.handle(inbound(core.KindEdit, "d1", c.edit), "discord")
+			if relayed := len(q) == 1; relayed != c.relayed {
+				t.Errorf("edit relayed = %v, want %v", relayed, c.relayed)
+			}
+		})
+	}
+}
+
+func TestLowerFallback(t *testing.T) {
+	r := newRouter(t)
+	withHook(t, r, `on("deliver", function(ev, dst) if not dst:can("edit") then ev.kind = "post" end end)`)
 	orig := relay(t, r, "d1", "i1")
 
 	d, ok := r.lower(core.Event{Kind: core.KindEdit, ID: orig.ID}, irc, core.Caps())

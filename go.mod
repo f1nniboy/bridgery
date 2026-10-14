@@ -6,6 +6,7 @@ require (
 	github.com/bwmarrin/discordgo v0.29.0
 	github.com/ergochat/irc-go v0.7.0
 	github.com/fsnotify/fsnotify v1.10.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/minio/minio-go/v7 v7.3.0
 	github.com/oklog/ulid/v2 v2.1.2
 	github.com/pelletier/go-toml/v2 v2.4.3
@@ -21,7 +22,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/klauspost/compress v1.19.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.4.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect

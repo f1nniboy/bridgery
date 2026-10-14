@@ -1,7 +1,6 @@
 package xmpp
 
 import (
-	"context"
 	"crypto/sha1"
 	"encoding/hex"
 	"fmt"
@@ -239,7 +238,7 @@ func (b *Bridge) joinRoom(r *room, from jid.JID, nick, key, photo string) error 
 	if photo != "" {
 		pres.VCard = &vcardX{Photo: photo}
 	}
-	return b.session.Encode(context.Background(), pres)
+	return b.write(pres)
 }
 
 func (b *Bridge) botNick() string {
@@ -256,19 +255,19 @@ func (b *Bridge) leaveAll() {
 	b.roomMu.Lock()
 	defer b.roomMu.Unlock()
 	for _, r := range b.rooms {
-		leaveRoom(b, r.jid, r.nick, b.self)
+		b.leaveRoom(r.jid, r.nick, b.self)
 		for _, p := range r.drainPuppets() {
-			leaveRoom(b, r.jid, p.nick, p.jid)
+			b.leaveRoom(r.jid, p.nick, p.jid)
 		}
 	}
 }
 
-func leaveRoom(b *Bridge, roomJID jid.JID, nick string, from jid.JID) {
+func (b *Bridge) leaveRoom(roomJID jid.JID, nick string, from jid.JID) {
 	to, err := roomJID.WithResource(nick)
 	if err != nil {
 		return
 	}
-	_ = b.session.Encode(context.Background(), outPresence{
+	_ = b.write(outPresence{
 		Presence: stanza.Presence{To: to, From: from, Type: stanza.UnavailablePresence},
 	})
 }
