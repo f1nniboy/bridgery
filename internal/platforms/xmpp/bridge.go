@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -277,6 +278,11 @@ func (b *Bridge) onMessage(m inMessage) {
 		return
 	}
 	text := stripFallback(m.Body, m.Fallback)
+	files := m.files()
+	// if the message body is just a file url, drop the message body (fallback)
+	if slices.ContainsFunc(files, func(f core.File) bool { return f.URL == text }) {
+		text = ""
+	}
 	author := core.Author{ID: nick, Name: nick}
 	if av, ok := r.occupantAvatar(nick); ok {
 		author.Avatar = av
@@ -289,6 +295,7 @@ func (b *Bridge) onMessage(m inMessage) {
 		Message: core.Message{
 			Author:  author,
 			Content: span.Plain(text),
+			Files:   files,
 		},
 	})
 }

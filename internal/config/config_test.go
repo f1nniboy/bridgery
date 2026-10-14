@@ -25,6 +25,8 @@ func TestLoad(t *testing.T) {
 		{"accounts are opaque", "[accounts.irc.a]\nanything = 1", ""},
 		{"unknown top-level field", "[runtime]\nqueue_sise = 1", "unknown field runtime.queue_sise"},
 		{"unknown table", "[gateway]\nqueue_size = 1", "unknown field gateway"},
+		{"zero queue size", "[runtime]\nqueue_size = 0", "queue_size must be greater than 0"},
+		{"zero timeout", "[runtime]\ntimeout = '0s'", "timeout must be greater than 0"},
 		{"unknown mode", "[[gateways]]\n[[gateways.channels]]\naccount = 'a'\nchannel = 'b'\nmode = 'both'", "unknown mode"},
 	}
 	for _, c := range cases {

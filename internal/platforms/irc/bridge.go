@@ -18,13 +18,13 @@ import (
 )
 
 var requestCaps = []string{
-	"message-tags",
-	"server-time",
-	"echo-message",
-	"labeled-response",
-	"batch",
-	"account-tag",
-	"draft/message-redaction",
+	"message-tags",            // https://ircv3.net/specs/extensions/message-tags
+	"server-time",             // https://ircv3.net/specs/extensions/server-time
+	"echo-message",            // https://ircv3.net/specs/extensions/echo-message
+	"labeled-response",        // https://ircv3.net/specs/extensions/labeled-response
+	"batch",                   // https://ircv3.net/specs/extensions/batch
+	"account-tag",             // https://ircv3.net/specs/extensions/account-tag
+	"draft/message-redaction", // https://ircv3.net/specs/extensions/message-redaction
 }
 
 const registerTimeout = 30 * time.Second
@@ -170,8 +170,8 @@ func (b *Bridge) onMessage(msg ircmsg.Message) {
 	if nick == b.conn.CurrentNick() || len(msg.Params) < 2 {
 		return
 	}
-	_, id := msg.GetTag("msgid")
-	_, parent := msg.GetTag("+draft/reply")
+	_, id := msg.GetTag("msgid")            // https://ircv3.net/specs/extensions/message-ids
+	_, parent := msg.GetTag("+draft/reply") // https://ircv3.net/specs/client-tags/reply
 	b.Send(core.Inbound{
 		Kind:     core.KindPost,
 		Origin:   core.Address{Channel: msg.Params[0]},
@@ -186,7 +186,7 @@ func (b *Bridge) onTyping(msg ircmsg.Message) {
 	if nick == b.conn.CurrentNick() || len(msg.Params) < 1 {
 		return
 	}
-	if _, v := msg.GetTag("+typing"); v != "active" {
+	if _, v := msg.GetTag("+typing"); v != "active" { // https://ircv3.net/specs/client-tags/typing
 		return
 	}
 	b.Send(core.Inbound{
@@ -237,7 +237,7 @@ func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, er
 			if id != "" {
 				ids = append(ids, id)
 			}
-			replyTo = "" // anchor the reply to the first line only
+			replyTo = "" // only reply to first line
 		}
 		return core.Receipt{IDs: ids}, nil
 

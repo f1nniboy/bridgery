@@ -4,31 +4,39 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/xml"
+	"net/url"
+	"path"
 
 	"mellium.im/xmpp/jid"
 	"mellium.im/xmpp/stanza"
+
+	"github.com/f1nniboy/bridgery/internal/core"
 )
 
 const (
-	nsReply = "urn:xmpp:reply:0"
-	nsVCard = "vcard-temp"
+	nsReply = "urn:xmpp:reply:0" // https://xmpp.org/extensions/xep-0461.html
+	nsVCard = "vcard-temp"       // https://xmpp.org/extensions/xep-0054.html
 )
 
+// https://xmpp.org/extensions/xep-0424.html
 type retract struct {
 	XMLName xml.Name `xml:"urn:xmpp:message-retract:1 retract"`
 	ID      string   `xml:"id,attr"`
 }
 
+// https://xmpp.org/extensions/xep-0334.html
 type storeHint struct {
 	XMLName xml.Name `xml:"urn:xmpp:hints store"`
 }
 
+// https://xmpp.org/extensions/xep-0461.html
 type reply struct {
 	XMLName xml.Name `xml:"urn:xmpp:reply:0 reply"`
 	To      string   `xml:"to,attr,omitempty"`
 	ID      string   `xml:"id,attr"`
 }
 
+// https://xmpp.org/extensions/xep-0428.html
 type fallback struct {
 	XMLName xml.Name       `xml:"urn:xmpp:fallback:0 fallback"`
 	For     string         `xml:"for,attr"`
@@ -40,21 +48,30 @@ type fallbackBody struct {
 	End   *int `xml:"end,attr"`
 }
 
+// https://xmpp.org/extensions/xep-0359.html
 type originID struct {
 	XMLName xml.Name `xml:"urn:xmpp:sid:0 origin-id"`
 	ID      string   `xml:"id,attr"`
 }
 
+// https://xmpp.org/extensions/xep-0359.html
 type stanzaID struct {
 	XMLName xml.Name `xml:"urn:xmpp:sid:0 stanza-id"`
 	ID      string   `xml:"id,attr"`
 	By      string   `xml:"by,attr"`
 }
 
+// https://xmpp.org/extensions/xep-0066.html
+type oob struct {
+	URL string `xml:"url"`
+}
+
+// https://xmpp.org/extensions/xep-0380.html
 type encryption struct {
 	XMLName xml.Name `xml:"urn:xmpp:eme:0 encryption"`
 }
 
+// https://xmpp.org/extensions/xep-0085.html
 type chatState struct{}
 
 type outMessage struct {
@@ -76,6 +93,7 @@ type inMessage struct {
 	Reply      reply       `xml:"urn:xmpp:reply:0 reply"`
 	Retract    retract     `xml:"urn:xmpp:message-retract:1 retract"`
 	Fallback   []fallback  `xml:"urn:xmpp:fallback:0 fallback"`
+	OOB        []oob       `xml:"jabber:x:oob x"`
 	Encryption *encryption `xml:"urn:xmpp:eme:0 encryption"`
 	Composing  *chatState  `xml:"http://jabber.org/protocol/chatstates composing"`
 }
@@ -89,6 +107,22 @@ func (m inMessage) stanzaID(room jid.JID) string {
 	return ""
 }
 
+func (m inMessage) files() []core.File {
+	var out []core.File
+	for _, o := range m.OOB {
+		u, err := url.Parse(o.URL)
+		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			continue
+		}
+		name := path.Base(u.Path)
+		if name == "." || name == "/" {
+			name = "file"
+		}
+		out = append(out, core.File{Name: name, URL: o.URL, Public: true})
+	}
+	return out
+}
+
 type inPresence struct {
 	stanza.Presence
 	Error *presenceError `xml:"error"`
@@ -100,6 +134,7 @@ type mucUser struct {
 	Status []mucStatus `xml:"status"`
 }
 
+// https://xmpp.org/extensions/xep-0045.html#statuscodes
 type mucStatus struct {
 	Code int `xml:"code,attr"`
 }
@@ -131,6 +166,7 @@ func (m *mucUser) selfJoined() bool {
 	return false
 }
 
+// https://xmpp.org/extensions/xep-0153.html
 type vcardX struct {
 	XMLName xml.Name `xml:"vcard-temp:x:update x"`
 	Photo   string   `xml:"photo"`
@@ -143,6 +179,7 @@ type inIQ struct {
 
 type vcardQuery struct{}
 
+// https://xmpp.org/extensions/xep-0054.html
 type vCard struct {
 	XMLName xml.Name    `xml:"vcard-temp vCard"`
 	Photo   *vCardPhoto `xml:"PHOTO"`
@@ -160,6 +197,7 @@ func vcardPayload(mime string, data []byte) xml.TokenReader {
 	return xml.NewDecoder(&buf)
 }
 
+// https://datatracker.ietf.org/doc/html/rfc6120#section-8.3.3
 type presenceError struct {
 	Type      string      `xml:"type,attr"`
 	Condition conditionEl `xml:",any"`
@@ -183,6 +221,7 @@ func (e *presenceError) reason() string {
 	return e.Type
 }
 
+// https://xmpp.org/extensions/xep-0045.html#enter-errorcodes
 func (e *presenceError) permanent() bool {
 	if e == nil {
 		return false
@@ -194,6 +233,7 @@ func (e *presenceError) permanent() bool {
 	return false
 }
 
+// https://xmpp.org/extensions/xep-0045.html#enter
 type mucX struct {
 	XMLName  xml.Name    `xml:"http://jabber.org/protocol/muc x"`
 	History  *mucHistory `xml:"history,omitempty"`

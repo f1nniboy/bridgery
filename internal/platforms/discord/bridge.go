@@ -1,7 +1,6 @@
 package discord
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"sync"
@@ -155,7 +154,8 @@ func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, er
 
 	switch d.Event.Kind {
 	case core.KindPost:
-		text, files := b.render(ctx, d.Event.Content, d.Event.Files)
+		text := d.Event.Content.Text()
+		files := b.uploads(ctx, ch, d.Event.Files)
 		if text == "" && len(files) == 0 {
 			return core.Receipt{}, nil
 		}
@@ -210,25 +210,4 @@ func extract(m *discordgo.Message) (span.Spans, []core.File) {
 		files = append(files, attachments(s.Message)...)
 	}
 	return content, files
-}
-
-func attachments(m *discordgo.Message) []core.File {
-	files := make([]core.File, 0, len(m.Attachments))
-	for _, a := range m.Attachments {
-		files = append(files, core.File{Name: a.Filename, MIME: a.ContentType, URL: a.URL, Public: true, Key: a.ID})
-	}
-	return files
-}
-
-func (b *Bridge) render(ctx context.Context, content span.Spans, files []core.File) (string, []*discordgo.File) {
-	var out []*discordgo.File
-	for _, f := range files {
-		data, err := f.Bytes(ctx)
-		if err != nil {
-			b.Log.Warn("file fetch, dropping file", "file", f.Name, "err", err)
-			continue
-		}
-		out = append(out, &discordgo.File{Name: f.Name, ContentType: f.MIME, Reader: bytes.NewReader(data)})
-	}
-	return content.Text(), out
 }

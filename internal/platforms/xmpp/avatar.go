@@ -49,7 +49,12 @@ func (b *Bridge) fetchAvatar(r *room, nick string, from jid.JID, hash string) {
 		b.Log.Warn("xmpp vcard decode", "nick", nick, "err", err)
 		return
 	}
-	r.setOccupantAvatar(nick, core.File{Data: data, Key: hash, Name: hash, MIME: v.Photo.Type})
+	name := hash
+	// TODO: maybe a bit hacky?
+	if ext, ok := strings.CutPrefix(v.Photo.Type, "image/"); ok && ext != "" {
+		name += "." + ext
+	}
+	r.setOccupantAvatar(nick, core.File{Data: data, Key: hash, Name: name, MIME: v.Photo.Type})
 }
 
 // outbound: publish a puppet's avatar, once per identity, so xmpp clients can see it

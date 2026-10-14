@@ -8,11 +8,6 @@ import (
 	"github.com/f1nniboy/bridgery/internal/core"
 )
 
-type bindKey struct {
-	id   core.CID
-	addr core.Address
-}
-
 type nativeKey struct {
 	addr   core.Address
 	native string
@@ -29,7 +24,7 @@ type memory struct {
 	elems map[core.CID]*list.Element
 
 	messages map[core.CID]core.Message
-	bindings map[bindKey][]string
+	bindings map[core.CID]map[core.Address][]string
 	reverse  map[nativeKey]core.CID
 }
 
@@ -37,7 +32,7 @@ func (m *memory) Open() error {
 	m.order = list.New()
 	m.elems = make(map[core.CID]*list.Element)
 	m.messages = make(map[core.CID]core.Message)
-	m.bindings = make(map[bindKey][]string)
+	m.bindings = make(map[core.CID]map[core.Address][]string)
 	m.reverse = make(map[nativeKey]core.CID)
 	return nil
 }
@@ -68,15 +63,12 @@ func (m *memory) clean() {
 	delete(m.elems, id)
 	delete(m.messages, id)
 
-	for key, natives := range m.bindings {
-		if key.id != id {
-			continue
-		}
+	for addr, natives := range m.bindings[id] {
 		for _, n := range natives {
-			delete(m.reverse, nativeKey{key.addr, n})
+			delete(m.reverse, nativeKey{addr, n})
 		}
-		delete(m.bindings, key)
 	}
+	delete(m.bindings, id)
 }
 
 func (m *memory) Put(id core.CID, r core.Message) {
@@ -104,13 +96,15 @@ func (m *memory) Bind(id core.CID, addr core.Address, natives []string) {
 	defer m.mu.Unlock()
 	m.track(id)
 
-	key := bindKey{id, addr}
-	if old, ok := m.bindings[key]; ok {
-		for _, n := range old {
-			delete(m.reverse, nativeKey{addr, n})
-		}
+	byAddr := m.bindings[id]
+	if byAddr == nil {
+		byAddr = make(map[core.Address][]string)
+		m.bindings[id] = byAddr
 	}
-	m.bindings[key] = slices.Clone(natives)
+	for _, n := range byAddr[addr] {
+		delete(m.reverse, nativeKey{addr, n})
+	}
+	byAddr[addr] = slices.Clone(natives)
 	for _, n := range natives {
 		m.reverse[nativeKey{addr, n}] = id
 	}
@@ -126,7 +120,7 @@ func (m *memory) Canonical(addr core.Address, nativeID string) (core.CID, bool) 
 func (m *memory) Native(id core.CID, dst core.Address) ([]string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	natives, ok := m.bindings[bindKey{id, dst}]
+	natives, ok := m.bindings[id][dst]
 	if !ok {
 		return nil, false
 	}

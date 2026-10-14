@@ -206,7 +206,7 @@ func (b *Bridge) occupantNick(a core.Author) string {
 }
 
 func (b *Bridge) ensurePuppet(r *room, ev core.Event) (jid.JID, error) {
-	key := ev.Origin.Account + ev.Author.ID
+	key := ev.Origin.Account + "\x00" + ev.Author.ID
 
 	pj, ok := r.puppetJID(key)
 	if !ok {

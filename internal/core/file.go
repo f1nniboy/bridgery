@@ -5,10 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"time"
 )
-
-var fileClient = &http.Client{Timeout: 5 * time.Second}
 
 type File struct {
 	Name   string `luar:"name"`
@@ -32,7 +29,7 @@ func (f File) Bytes(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	resp, err := fileClient.Do(req)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

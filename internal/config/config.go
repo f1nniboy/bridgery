@@ -101,6 +101,12 @@ func Decode(r io.Reader, v any) error {
 }
 
 func (c Config) Validate() error {
+	if c.Runtime.QueueSize <= 0 {
+		return errors.New("config: runtime.queue_size must be greater than 0")
+	}
+	if c.Runtime.Timeout <= 0 {
+		return errors.New("config: runtime.timeout must be greater than 0")
+	}
 	for _, gw := range c.Gateways {
 		for _, ch := range gw.Channels {
 			switch ch.Mode {

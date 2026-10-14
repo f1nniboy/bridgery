@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"time"
 
 	"golang.org/x/sync/singleflight"
 
 	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 )
+
+const hostTimeout = 30 * time.Second
 
 type store interface {
 	Get(ctx context.Context, key, name string) (string, bool)
@@ -61,33 +64,44 @@ func (r *resolver) URL(ctx context.Context, f core.File) (string, error) {
 		flight = "b:" + key
 	}
 
-	v, err, _ := r.group.Do(flight, func() (any, error) {
-		var data []byte
-		if key == "" {
-			b, err := f.Bytes(ctx)
-			if err != nil {
-				return "", err
-			}
-			key, data = hashHex(b), b
-		}
-
-		if url, ok := r.backend.Get(ctx, key, f.Name); ok {
-			return url, nil
-		}
-
-		if data == nil {
-			b, err := f.Bytes(ctx)
-			if err != nil {
-				return "", err
-			}
-			data = b
-		}
-		return r.backend.Put(ctx, key, f.Name, f.MIME, data)
+	ch := r.group.DoChan(flight, func() (any, error) {
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), hostTimeout)
+		defer cancel()
+		return r.host(ctx, f, key)
 	})
-	if err != nil {
-		return "", err
+	select {
+	case res := <-ch:
+		if res.Err != nil {
+			return "", res.Err
+		}
+		return res.Val.(string), nil
+	case <-ctx.Done():
+		return "", ctx.Err()
 	}
-	return v.(string), nil
+}
+
+func (r *resolver) host(ctx context.Context, f core.File, key string) (string, error) {
+	var data []byte
+	if key == "" {
+		b, err := f.Bytes(ctx)
+		if err != nil {
+			return "", err
+		}
+		key, data = hashHex(b), b
+	}
+
+	if url, ok := r.backend.Get(ctx, key, f.Name); ok {
+		return url, nil
+	}
+
+	if data == nil {
+		b, err := f.Bytes(ctx)
+		if err != nil {
+			return "", err
+		}
+		data = b
+	}
+	return r.backend.Put(ctx, key, f.Name, f.MIME, data)
 }
 
 func hashHex(b []byte) string {

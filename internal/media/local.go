@@ -44,7 +44,11 @@ func (l *local) Put(_ context.Context, key, name, _ string, data []byte) (string
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", err
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, path); err != nil {
 		return "", err
 	}
 	return url, nil

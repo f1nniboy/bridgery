@@ -62,7 +62,7 @@ func run() error {
 		}
 		for label, raw := range labels {
 			id := platform + "." + label
-			b := newBridge(core.NewCommon(logging.New("platform."+platform), med))
+			b := newBridge(core.NewCommon(logging.New(id), med))
 			if err := config.Decode(bytes.NewReader(raw), b); err != nil {
 				return fmt.Errorf("account %q: %w", id, err)
 			}
