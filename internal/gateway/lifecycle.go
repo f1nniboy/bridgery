@@ -5,7 +5,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 )
 
@@ -14,26 +13,8 @@ const (
 	maxBackoff = 15 * time.Minute
 )
 
-func buildChannels(defs []config.Gateway) map[string][]core.ChannelSpec {
-	channels := make(map[string][]core.ChannelSpec)
-	seen := make(map[string]map[string]bool) // account -> channel set
-	for _, gw := range defs {
-		for _, c := range gw.Channels {
-			if seen[c.Account] == nil {
-				seen[c.Account] = make(map[string]bool)
-			}
-			if seen[c.Account][c.Channel] {
-				continue
-			}
-			seen[c.Account][c.Channel] = true
-			channels[c.Account] = append(channels[c.Account], core.ChannelSpec{Name: c.Channel, Key: string(c.Key)})
-		}
-	}
-	return channels
-}
-
-func (g *Gateway) manage(ctx context.Context, account string, ch <-chan core.Status) {
-	b := g.accounts[account].Bridge
+func (r *Router) manage(ctx context.Context, account string, ch <-chan core.Status, drained <-chan struct{}) {
+	b := r.accounts[account].Bridge
 	var delay time.Duration
 
 	for {
@@ -50,24 +31,29 @@ func (g *Gateway) manage(ctx context.Context, account string, ch <-chan core.Sta
 
 		if err := b.Open(ctx); err != nil {
 			if errors.Is(err, core.ErrPermanent) {
-				g.log.Error("connect failed, giving up", "account", account, "err", err)
+				r.log.Error("connect failed, giving up", "account", account, "err", err)
 				return
 			}
 			delay = nextBackoff(delay)
-			g.log.Warn("connect failed, retrying", "account", account, "err", err, "in", delay)
+			r.log.Warn("connect failed, retrying", "account", account, "err", err, "in", delay)
 			continue
 		}
-		g.log.Info("connected", "account", account)
+		r.log.Info("connected", "account", account)
 
-		reconnect := g.supervise(ctx, account, ch)
-		if err := b.Close(); err != nil {
-			g.log.Warn("close bridge", "account", account, "err", err)
-		}
-		if !reconnect {
+		if !r.supervise(ctx, account, ch) {
+			<-drained
+			r.close(account)
 			return
 		}
+		r.close(account)
 		delay = minBackoff
-		g.log.Warn("disconnected, reconnecting", "account", account, "in", delay)
+		r.log.Warn("disconnected, reconnecting", "account", account, "in", delay)
+	}
+}
+
+func (r *Router) close(account string) {
+	if err := r.accounts[account].Bridge.Close(); err != nil {
+		r.log.Warn("close bridge", "account", account, "err", err)
 	}
 }
 
@@ -90,10 +76,10 @@ func (s *chanRetry) stop() {
 	}
 }
 
-func (g *Gateway) supervise(ctx context.Context, account string, ch <-chan core.Status) bool {
-	b := g.accounts[account].Bridge
+func (r *Router) supervise(ctx context.Context, account string, ch <-chan core.Status) bool {
+	b := r.accounts[account].Bridge
 	states := map[string]*chanRetry{}
-	retry := make(chan string, len(g.channels[account])+1)
+	retry := make(chan string, len(r.channels[account])+1)
 	defer func() {
 		for _, s := range states {
 			s.stop()
@@ -108,11 +94,11 @@ func (g *Gateway) supervise(ctx context.Context, account string, ch <-chan core.
 		s.stop()
 		if errors.Is(err, core.ErrPermanent) {
 			delete(states, name)
-			g.log.Error("channel down, giving up", "account", account, "channel", name, "err", err)
+			r.log.Error("channel down, giving up", "account", account, "channel", name, "err", err)
 			return
 		}
 		s.delay = nextBackoff(s.delay)
-		g.log.Warn("channel down, retrying", "account", account, "channel", name, "err", err, "in", s.delay)
+		r.log.Warn("channel down, retrying", "account", account, "channel", name, "err", err, "in", s.delay)
 		s.timer = time.AfterFunc(s.delay, func() {
 			select {
 			case retry <- name:
@@ -140,7 +126,7 @@ func (g *Gateway) supervise(ctx context.Context, account string, ch <-chan core.
 				for _, s := range states {
 					s.stop()
 				}
-				for _, spec := range g.channels[account] {
+				for _, spec := range r.channels[account] {
 					s := &chanRetry{spec: spec}
 					states[spec.Name] = s
 					join(s)

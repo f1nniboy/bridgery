@@ -73,16 +73,17 @@ func run() error {
 		return fmt.Errorf("no accounts configured")
 	}
 
-	gw, err := gateway.New(cfg, store, accounts, med, log)
+	router, err := gateway.New(cfg, store, accounts, med, log)
 	if err != nil {
 		return fmt.Errorf("build gateway: %w", err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	context.AfterFunc(ctx, stop) // a second signal kills immediately
 
 	log.Info("starting", "accounts", len(accounts), "gateways", len(cfg.Gateways))
-	if err := gw.Run(ctx); err != nil {
+	if err := router.Run(ctx); err != nil {
 		return fmt.Errorf("run gateway: %w", err)
 	}
 	return nil

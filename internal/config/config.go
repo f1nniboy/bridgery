@@ -11,6 +11,7 @@ import (
 	"github.com/pelletier/go-toml/v2"
 	"github.com/pelletier/go-toml/v2/unstable"
 
+	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/hook"
 	"github.com/f1nniboy/bridgery/internal/logging"
 )
@@ -40,6 +41,10 @@ type Channel struct {
 	Mode    string `toml:"mode,commented" comment:"in: write-only, messages are never relayed here\nout: read-only, messages sent here are never relayed\ninout (default): normal"`
 
 	Key Secret `toml:"key,commented" comment:"bridge-specific join secret (e.g. IRC)"`
+}
+
+func (c Channel) Address() core.Address {
+	return core.Address{Account: c.Account, Channel: c.Channel}
 }
 
 func (c Channel) Sources() bool  { return c.Mode != "out" }
