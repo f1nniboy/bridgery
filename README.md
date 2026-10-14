@@ -33,7 +33,11 @@ Read the **[setup guide](docs/SETUP.md)** for a walkthrough.
 
 ### Chat with us
 
-...
+If you'd rather like to see the bridge in action, join us in these channels. All of them are bridged with eachother.
+
+- **Discord:** [discord.gg/U4GRHqY79e](https://discord.gg/U4GRHqY79e)
+- **XMPP:** [bridgery@conference.oss.zone](https://join.jabber.network/#bridgery@conference.oss.zone?join)
+- **IRC:** [#bridgery on libera.chat](https://web.libera.chat/#bridgery)
 
 ## Related projects
 

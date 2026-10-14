@@ -1,15 +1,16 @@
 package core
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/f1nniboy/bridgery/internal/span"
 )
 
 type Author struct {
-	ID     string `luar:"id"`
-	Name   string `luar:"name"`
-	Avatar File   `luar:"avatar"`
+	ID     string `json:"id,omitzero" luar:"id"`
+	Name   string `json:"name,omitzero" luar:"name"`
+	Avatar File   `json:"avatar,omitzero" luar:"avatar"`
 }
 
 func (a Author) Display() string {
@@ -20,9 +21,21 @@ func (a Author) Display() string {
 }
 
 type Message struct {
-	Author  Author     `luar:"author"`
-	Content span.Spans `luar:"content"`
-	Files   []File     `luar:"files"`
+	Author  Author     `json:"author,omitzero" luar:"author"`
+	Content span.Spans `json:"content,omitzero" luar:"content"`
+	Files   []File     `json:"files,omitzero" luar:"files"`
+}
+
+func (m Message) WithoutData() Message {
+	m.Author.Avatar.Data = nil
+	if len(m.Files) > 0 {
+		files := slices.Clone(m.Files)
+		for i := range files {
+			files[i].Data = nil
+		}
+		m.Files = files
+	}
+	return m
 }
 
 func (m *Message) Prepend(parts ...any) { m.Content = append(span.Of(parts...), m.Content...) }

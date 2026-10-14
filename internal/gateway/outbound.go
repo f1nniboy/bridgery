@@ -28,19 +28,22 @@ func (r *Router) deliver(ctx context.Context, dst core.Address, ev core.Event) {
 		return
 	}
 	defer acc.release()
-	b := acc.Bridge
 
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	caps := b.Caps() // re-run every time as caps may change (e.g. IRC)
+	caps := acc.Bridge.Caps() // re-run every time as caps may change (e.g. IRC)
 	ev = r.resolveFiles(ctx, ev, dst, caps)
-	d, ok := r.lower(ev, dst, caps)
+	d, ok, err := r.lower(ctx, ev, dst, caps)
+	if err != nil {
+		r.log.Warn("ledger", "dst", dst, "kind", ev.Kind, "err", err)
+		return
+	}
 	if !ok {
 		return
 	}
 
-	receipt, err := b.Deliver(ctx, d)
+	receipt, err := acc.Bridge.Deliver(ctx, d)
 	if err != nil {
 		r.log.Warn("deliver", "dst", dst, "err", err)
 		return
@@ -48,11 +51,20 @@ func (r *Router) deliver(ctx context.Context, dst core.Address, ev core.Event) {
 	if len(receipt.IDs) == 0 {
 		return
 	}
+
+	bindCtx, cancelBind := context.WithTimeout(context.WithoutCancel(ctx), r.timeout)
+	defer cancelBind()
+	ids := receipt.IDs
 	if d.Fallback {
-		existing, _ := r.ledger.Native(ev.ID, dst)
-		r.ledger.Bind(ev.ID, dst, append(existing, receipt.IDs...))
-	} else {
-		r.ledger.Bind(ev.ID, dst, receipt.IDs)
+		existing, _, err := r.ledger.Native(bindCtx, ev.ID, dst)
+		if err != nil {
+			r.log.Warn("ledger", "dst", dst, "err", err)
+			return
+		}
+		ids = append(existing, ids...)
+	}
+	if err := r.ledger.Bind(bindCtx, ev.ID, dst, ids); err != nil {
+		r.log.Warn("ledger", "dst", dst, "err", err)
 	}
 }
 
@@ -82,17 +94,23 @@ func (r *Router) resolveFiles(ctx context.Context, ev core.Event, dst core.Addre
 	return ev
 }
 
-func (r *Router) lower(ev core.Event, dst core.Address, caps core.CapSet) (core.Delivery, bool) {
+func (r *Router) lower(ctx context.Context, ev core.Event, dst core.Address, caps core.CapSet) (core.Delivery, bool, error) {
 	origKind := ev.Kind
 
 	var parent *core.Message
 	var parentIDs []string
 	var parentOK bool
 	if ev.ParentID != "" {
-		if rec, ok := r.ledger.Get(ev.ParentID); ok {
+		rec, found, err := r.ledger.Get(ctx, ev.ParentID)
+		if err != nil {
+			return core.Delivery{}, false, err
+		}
+		if found {
 			parent = &rec
 		}
-		parentIDs, parentOK = r.ledger.Native(ev.ParentID, dst)
+		if parentIDs, parentOK, err = r.ledger.Native(ctx, ev.ParentID, dst); err != nil {
+			return core.Delivery{}, false, err
+		}
 	}
 
 	if r.hooks != nil {
@@ -102,7 +120,7 @@ func (r *Router) lower(ev core.Event, dst core.Address, caps core.CapSet) (core.
 		}
 		var keep bool
 		if ev, keep = r.hooks.Deliver(ev, t); !keep {
-			return core.Delivery{}, false
+			return core.Delivery{}, false, nil
 		}
 	}
 
@@ -117,7 +135,7 @@ func (r *Router) lower(ev core.Event, dst core.Address, caps core.CapSet) (core.
 		if parentOK && caps.Has(core.CapReply) {
 			d.ParentIDs = parentIDs
 		}
-		return d, true
+		return d, true, nil
 
 	case core.KindEdit, core.KindDelete:
 		need := core.CapEdit
@@ -125,17 +143,17 @@ func (r *Router) lower(ev core.Event, dst core.Address, caps core.CapSet) (core.
 			need = core.CapDelete
 		}
 		if !caps.Has(need) {
-			return core.Delivery{}, false
+			return core.Delivery{}, false, nil
 		}
-		natives, ok := r.ledger.Native(ev.ID, dst)
-		if !ok {
-			return core.Delivery{}, false
+		natives, ok, err := r.ledger.Native(ctx, ev.ID, dst)
+		if !ok || err != nil {
+			return core.Delivery{}, false, err
 		}
 		d.IDs = natives
-		return d, true
+		return d, true, nil
 
 	case core.KindTyping:
-		return d, caps.Has(core.CapTyping)
+		return d, caps.Has(core.CapTyping), nil
 	}
-	return core.Delivery{}, false
+	return core.Delivery{}, false, nil
 }

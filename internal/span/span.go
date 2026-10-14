@@ -13,8 +13,8 @@ const (
 )
 
 type Span struct {
-	Kind Kind   `luar:"kind"`
-	Text string `luar:"text"`
+	Kind Kind   `json:"kind" luar:"kind"`
+	Text string `json:"text,omitzero" luar:"text"`
 }
 
 func (sp Span) Display() string {

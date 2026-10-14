@@ -68,7 +68,7 @@ With Docker, put the variables in a `.env` file next to `docker-compose.yml` and
 
 ## 4. Hooks (recommended)
 
-Out of the box, a message from Discord arrives on IRC as just its text, with no indication of who sent it. **Hooks** are small Lua scripts that fix that (prefix the author's name, quote replies, append file links, add fallback avatars). Example hooks ship in [`hooks/examples/`](../hooks/examples). They are **opt-in**, so nothing loads unless you copy them into a directory and point at it:
+Out of the box, a message from Discord arrives on IRC as just its text, with no indication of who the author is. **Hooks** are small Lua scripts that fix that (prefix the author's name, quote replies, append file links, add fallback avatars). Example hooks ship in [`hooks/examples/`](../hooks/examples). They are **opt-in**, so nothing loads unless you copy them into a directory and point at it:
 
 ```sh
 mkdir -p hooks && cp hooks/examples/*.lua hooks/
@@ -76,7 +76,7 @@ mkdir -p hooks && cp hooks/examples/*.lua hooks/
 
 ```toml
 [hooks]
-dir = 'hooks' # or an absolute path, '/hooks' in the Docker image
+dir = 'hooks' # or an absolute path, e.g. '/hooks' in the Docker image
 ```
 
 For Docker, uncomment the `./hooks:/hooks` volume in `docker-compose.yml` and set `dir = '/hooks'`. See [HOOKS.md](HOOKS.md), which also covers the editor autocomplete.
@@ -87,7 +87,7 @@ For example, Discord ingests uploaded files directly, but IRC and XMPP can only 
 
 ## 6. Edits, deletes, and replies
 
-These follow a message across platforms automatically, with no setup. An edit or delete on one side updates the bridged copies on the others, and replies stay threaded. To do this the bridge keeps track of recent messages. See [LEDGER.md](LEDGER.md) if you want to change where and how messages are stored.
+These follow a message across platforms automatically, with no setup. An edit or delete on one side updates the bridged copies on the others, and replies stay consistent. To do this the bridge keeps track of recent messages, by default only in memory. For a bridge that should keep working across restarts, switch to the `sqlite` backend, see [LEDGER.md](LEDGER.md).
 
 ## 7. Run and verify
 

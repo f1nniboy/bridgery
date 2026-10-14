@@ -56,18 +56,40 @@ func newRouter(t *testing.T) *Router {
 	}, log: slog.New(slog.DiscardHandler)}
 }
 
+func lift(t *testing.T, r *Router, in core.Inbound) (core.Event, bool) {
+	t.Helper()
+	ev, ok, err := r.lift(t.Context(), in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ev, ok
+}
+
+func lower(t *testing.T, r *Router, ev core.Event, dst core.Address, caps core.CapSet) (core.Delivery, bool) {
+	t.Helper()
+	d, ok, err := r.lower(t.Context(), ev, dst, caps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d, ok
+}
+
 func inbound(kind core.Kind, native, text string) core.Inbound {
 	return core.Inbound{Kind: kind, Origin: discord, NativeID: native, Message: core.Message{Content: span.Plain(text)}}
 }
 
 func relay(t *testing.T, r *Router, native, ircNative string) core.Event {
 	t.Helper()
-	ev, ok := r.lift(inbound(core.KindPost, native, "hello"))
+	ev, ok := lift(t, r, inbound(core.KindPost, native, "hello"))
 	if !ok {
 		t.Fatal("post dropped")
 	}
-	r.ledger.Put(ev.ID, ev.Message)
-	r.ledger.Bind(ev.ID, irc, []string{ircNative})
+	if err := r.ledger.Put(t.Context(), ev.ID, ev.Message); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.ledger.Bind(t.Context(), ev.ID, irc, []string{ircNative}); err != nil {
+		t.Fatal(err)
+	}
 	return ev
 }
 
@@ -83,7 +105,7 @@ func TestLift(t *testing.T) {
 	t.Run("echo of a known native is dropped", func(t *testing.T) {
 		r := newRouter(t)
 		relay(t, r, "d1", "i1")
-		if _, ok := r.lift(inbound(core.KindPost, "d1", "hello")); ok {
+		if _, ok := lift(t, r, inbound(core.KindPost, "d1", "hello")); ok {
 			t.Error("echo not dropped")
 		}
 	})
@@ -91,7 +113,7 @@ func TestLift(t *testing.T) {
 	t.Run("edit resolves to the original cid", func(t *testing.T) {
 		r := newRouter(t)
 		orig := relay(t, r, "d1", "i1")
-		ev, ok := r.lift(inbound(core.KindEdit, "d1", "changed"))
+		ev, ok := lift(t, r, inbound(core.KindEdit, "d1", "changed"))
 		if !ok || ev.ID != orig.ID {
 			t.Errorf("edit = %+v, %v", ev, ok)
 		}
@@ -99,7 +121,7 @@ func TestLift(t *testing.T) {
 
 	t.Run("edit of an unknown message is dropped", func(t *testing.T) {
 		r := newRouter(t)
-		if _, ok := r.lift(inbound(core.KindEdit, "nope", "x")); ok {
+		if _, ok := lift(t, r, inbound(core.KindEdit, "nope", "x")); ok {
 			t.Error("unknown edit not dropped")
 		}
 	})
@@ -107,11 +129,11 @@ func TestLift(t *testing.T) {
 	t.Run("delete carries the stored content once", func(t *testing.T) {
 		r := newRouter(t)
 		relay(t, r, "d1", "i1")
-		ev, ok := r.lift(inbound(core.KindDelete, "d1", ""))
+		ev, ok := lift(t, r, inbound(core.KindDelete, "d1", ""))
 		if !ok || ev.Content.Text() != "hello" {
 			t.Errorf("delete = %+v, %v", ev, ok)
 		}
-		if _, ok := r.lift(inbound(core.KindDelete, "d1", "")); ok {
+		if _, ok := lift(t, r, inbound(core.KindDelete, "d1", "")); ok {
 			t.Error("second delete not dropped")
 		}
 	})
@@ -121,7 +143,7 @@ func TestLift(t *testing.T) {
 		parent := relay(t, r, "d1", "i1")
 		in := inbound(core.KindPost, "d2", "reply")
 		in.ParentID = "d1"
-		ev, _ := r.lift(in)
+		ev, _ := lift(t, r, in)
 		if ev.ParentID != parent.ID {
 			t.Errorf("ParentID = %q, want %q", ev.ParentID, parent.ID)
 		}
@@ -137,14 +159,14 @@ func TestLower(t *testing.T) {
 		orig := relay(t, r, "d1", "i1")
 		edit := core.Event{Kind: core.KindEdit, ID: orig.ID}
 
-		if _, ok := r.lower(edit, irc, none); ok {
+		if _, ok := lower(t, r, edit, irc, none); ok {
 			t.Error("edit delivered without CapEdit")
 		}
-		d, ok := r.lower(edit, irc, all)
+		d, ok := lower(t, r, edit, irc, all)
 		if !ok || !slices.Equal(d.IDs, []string{"i1"}) {
 			t.Errorf("delivery = %+v, %v", d, ok)
 		}
-		if _, ok := r.lower(edit, xmpp, all); ok {
+		if _, ok := lower(t, r, edit, xmpp, all); ok {
 			t.Error("edit delivered to a destination that never got the post")
 		}
 	})
@@ -154,11 +176,11 @@ func TestLower(t *testing.T) {
 		parent := relay(t, r, "d1", "i1")
 		ev := core.Event{Kind: core.KindPost, ParentID: parent.ID}
 
-		d, _ := r.lower(ev, irc, all)
+		d, _ := lower(t, r, ev, irc, all)
 		if !slices.Equal(d.ParentIDs, []string{"i1"}) || d.Parent == nil {
 			t.Errorf("with cap: %+v", d)
 		}
-		d, _ = r.lower(ev, irc, none)
+		d, _ = lower(t, r, ev, irc, none)
 		if d.ParentIDs != nil || d.Parent == nil {
 			t.Errorf("without cap: %+v", d)
 		}
@@ -167,10 +189,10 @@ func TestLower(t *testing.T) {
 	t.Run("typing needs the cap", func(t *testing.T) {
 		r := newRouter(t)
 		ev := core.Event{Kind: core.KindTyping}
-		if _, ok := r.lower(ev, irc, none); ok {
+		if _, ok := lower(t, r, ev, irc, none); ok {
 			t.Error("typing delivered without CapTyping")
 		}
-		if _, ok := r.lower(ev, irc, all); !ok {
+		if _, ok := lower(t, r, ev, irc, all); !ok {
 			t.Error("typing dropped with CapTyping")
 		}
 	})
@@ -223,11 +245,11 @@ func TestLowerFallback(t *testing.T) {
 	withHook(t, r, `on("deliver", function(ev, dst) if not dst:can("edit") then ev.kind = "post" end end)`)
 	orig := relay(t, r, "d1", "i1")
 
-	d, ok := r.lower(core.Event{Kind: core.KindEdit, ID: orig.ID}, irc, core.Caps())
+	d, ok := lower(t, r, core.Event{Kind: core.KindEdit, ID: orig.ID}, irc, core.Caps())
 	if !ok || !d.Fallback || d.Event.Kind != core.KindPost {
 		t.Errorf("delivery = %+v, %v", d, ok)
 	}
-	d, _ = r.lower(core.Event{Kind: core.KindPost, ID: orig.ID}, irc, core.Caps())
+	d, _ = lower(t, r, core.Event{Kind: core.KindPost, ID: orig.ID}, irc, core.Caps())
 	if d.Fallback {
 		t.Error("plain post marked as fallback")
 	}

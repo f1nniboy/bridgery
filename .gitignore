@@ -1,7 +1,8 @@
-/config.toml
+/*config.toml
 /hooks/*
 !/hooks/examples/
 !/hooks/library/
 !/hooks/.luarc.json
 /media/
+/data/
 /.env

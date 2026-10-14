@@ -8,12 +8,12 @@ import (
 )
 
 type File struct {
-	Name   string `luar:"name"`
-	MIME   string `luar:"mime"`
-	URL    string `luar:"url"`
-	Public bool   `luar:"public"` // url is safe to hand to other platforms
-	Key    string `luar:"key"`
-	Data   []byte `luar:"-"` // inline bytes if no url
+	Name   string `json:"name,omitzero" luar:"name"`
+	MIME   string `json:"mime,omitzero" luar:"mime"`
+	URL    string `json:"url,omitzero" luar:"url"`
+	Public bool   `json:"public,omitzero" luar:"public"` // url is safe to hand to other platforms
+	Key    string `json:"key,omitzero" luar:"key"`
+	Data   []byte `json:"-" luar:"-"` // inline bytes if no url
 }
 
 func (f File) Empty() bool { return f.URL == "" && len(f.Data) == 0 }

@@ -32,7 +32,7 @@ func main() {
 
 	cfg := genConfig{
 		Config: base,
-		Ledger: map[string]any{"memory": config.ExampleBackend(ledger.Registry, "memory")},
+		Ledger: map[string]any{"memory": config.ExampleBackend(ledger.Registry, "memory"), "sqlite": config.ExampleBackend(ledger.Registry, "sqlite")},
 		Media:  map[string]any{"local": config.ExampleBackend(media.Registry, "local"), "s3": config.ExampleBackend(media.Registry, "s3")},
 		Accounts: map[string]map[string]any{
 			"discord": {"main": platforms.Example("discord")},

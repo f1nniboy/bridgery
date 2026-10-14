@@ -39,8 +39,14 @@ channel = '#mychannel'
 
 # [ledger]
 # [ledger.memory]
-# max cached messages, 0 for unbounded
-# max_size = 10000
+# forget messages this long after they were last updated, 0 to keep them forever
+# max_age = '24h'
+
+# [ledger.sqlite]
+# database file, created if missing
+# path = '/var/lib/bridgery/ledger.db'
+# forget messages this long after they were last updated, 0 to keep them forever
+# max_age = '720h'
 
 # [media]
 # [media.local]

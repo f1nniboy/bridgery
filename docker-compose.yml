@@ -6,3 +6,4 @@ services:
     volumes:
       - ./config.toml:/etc/bridgery/config.toml:ro,z
       # - ./hooks:/hooks:ro,z
+      # - ./data:/var/lib/bridgery:z
