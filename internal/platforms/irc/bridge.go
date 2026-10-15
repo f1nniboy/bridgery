@@ -16,6 +16,7 @@ import (
 	"github.com/ergochat/irc-go/ircfmt"
 	"github.com/ergochat/irc-go/ircmsg"
 
+	"github.com/f1nniboy/bridgery/internal/await"
 	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/span"
@@ -37,6 +38,17 @@ var rejections = []string{
 	ircevent.ERR_SASLFAIL,         // https://modern.ircdocs.horse/#errsaslfail-904
 }
 
+var joinErrors = map[string]bool{ // numeric -> permanent
+	ircevent.ERR_NOSUCHCHANNEL:   true,  // https://modern.ircdocs.horse/#errnosuchchannel-403
+	ircevent.ERR_TOOMANYCHANNELS: true,  // https://modern.ircdocs.horse/#errtoomanychannels-405
+	ircevent.ERR_CHANNELISFULL:   false, // https://modern.ircdocs.horse/#errchannelisfull-471
+	ircevent.ERR_INVITEONLYCHAN:  true,  // https://modern.ircdocs.horse/#errinviteonlychan-473
+	ircevent.ERR_BANNEDFROMCHAN:  false, // https://modern.ircdocs.horse/#errbannedfromchan-474
+	ircevent.ERR_BADCHANNELKEY:   true,  // https://modern.ircdocs.horse/#errbadchannelkey-475
+	ircevent.ERR_BADCHANMASK:     true,  // https://modern.ircdocs.horse/#errbadchanmask-476
+	ircevent.ERR_NEEDREGGEDNICK:  true,  // https://defs.ircdocs.horse/defs/numerics
+}
+
 const registerTimeout = 30 * time.Second
 const sendDelay = 1000 * time.Millisecond
 
@@ -54,6 +66,7 @@ type Bridge struct {
 
 	conn     *ircevent.Connection
 	throttle *time.Ticker
+	joins    await.Map[string, error]
 
 	chanMu   sync.Mutex
 	channels map[string]string // casefolded name -> configured name
@@ -136,13 +149,23 @@ func (b *Bridge) Open(ctx context.Context) error {
 		if bot := b.conn.ISupport()["BOT"]; bot != "" {
 			_ = b.conn.Send("MODE", b.conn.CurrentNick(), "+"+bot)
 		}
-		b.Report(core.Status{Event: core.Ready})
+	})
+	b.conn.AddDisconnectCallback(func(ircmsg.Message) {
+		if ctx.Err() != nil {
+			return // closed by us
+		}
+		b.conn.Quit()
+		b.Log.Warn("irc connection lost")
+		b.Report(ctx, core.Status{Event: core.Disconnected})
 	})
 	b.conn.AddCallback("PRIVMSG", b.onMessage)
 	b.conn.AddCallback("TAGMSG", b.onTyping)
 	b.conn.AddCallback("REDACT", b.onRedact)
-	b.conn.AddCallback("KICK", b.onKick)
+	b.conn.AddCallback("KICK", func(m ircmsg.Message) { b.onKick(ctx, m) })
 	b.conn.AddCallback("JOIN", b.onJoin)
+	for code, permanent := range joinErrors {
+		b.conn.AddCallback(code, func(m ircmsg.Message) { b.onJoinError(m, permanent) })
+	}
 
 	var rejected atomic.Bool
 	for _, code := range rejections {
@@ -168,24 +191,41 @@ func (b *Bridge) Open(ctx context.Context) error {
 	return nil
 }
 
-func (b *Bridge) Join(ch core.ChannelSpec) error {
+func (b *Bridge) Join(ctx context.Context, ch core.ChannelSpec) error {
 	b.remember(ch.Name)
-	if ch.Key != "" {
-		return b.conn.Send("JOIN", ch.Name, ch.Key)
+	failure, err := b.joins.Await(ctx, b.fold(ch.Name), 30*time.Second, func() error {
+		if ch.Key != "" {
+			return b.conn.Send("JOIN", ch.Name, ch.Key)
+		}
+		return b.conn.Join(ch.Name)
+	})
+	if err != nil {
+		return err
 	}
-	return b.conn.Join(ch.Name)
+	return failure
 }
 
-func (b *Bridge) onKick(msg ircmsg.Message) {
+func (b *Bridge) onKick(ctx context.Context, msg ircmsg.Message) {
 	if len(msg.Params) >= 2 && b.fold(msg.Params[1]) == b.fold(b.conn.CurrentNick()) {
-		b.Report(core.Status{Event: core.ChannelDown, Channel: b.channel(msg.Params[0])})
+		b.Report(ctx, core.Status{Event: core.ChannelLost, Channel: b.channel(msg.Params[0])})
 	}
 }
 
 func (b *Bridge) onJoin(msg ircmsg.Message) {
 	if msg.Nick() == b.conn.CurrentNick() && len(msg.Params) >= 1 {
-		b.Report(core.Status{Event: core.ChannelUp, Channel: b.channel(msg.Params[0])})
+		b.joins.Resolve(b.fold(msg.Params[0]), nil)
 	}
+}
+
+func (b *Bridge) onJoinError(msg ircmsg.Message, permanent bool) {
+	if len(msg.Params) < 3 {
+		return
+	}
+	err := errors.New(msg.Params[2])
+	if permanent {
+		err = fmt.Errorf("%w: %w", err, core.ErrPermanent)
+	}
+	b.joins.Resolve(b.fold(msg.Params[1]), err)
 }
 
 func (b *Bridge) onMessage(msg ircmsg.Message) {

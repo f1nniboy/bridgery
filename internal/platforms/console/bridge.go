@@ -20,12 +20,14 @@ func (b *Bridge) Name() string         { return "Console" }
 func (b *Bridge) Example() core.Bridge { return &Bridge{} }
 func (b *Bridge) Caps() core.CapSet    { return nil }
 
-func (b *Bridge) Open(ctx context.Context) error {
-	go b.readInput()
+func (b *Bridge) Open(context.Context) error { return nil }
+
+func (b *Bridge) Join(_ context.Context, ch core.ChannelSpec) error {
+	go b.readInput(ch.Name)
 	return nil
 }
 
-func (b *Bridge) readInput() {
+func (b *Bridge) readInput(channel string) {
 	user := b.User
 	if user == "" {
 		user = "console"
@@ -38,6 +40,7 @@ func (b *Bridge) readInput() {
 		}
 		b.Send(core.Inbound{
 			Kind:    core.KindPost,
+			Origin:  core.Address{Channel: channel},
 			Message: core.Message{Author: core.Author{ID: user, Name: user}, Content: span.Plain(line)},
 		})
 	}
@@ -46,8 +49,7 @@ func (b *Bridge) readInput() {
 	}
 }
 
-func (b *Bridge) Join(core.ChannelSpec) error { return nil }
-func (b *Bridge) Close() error                { return nil }
+func (b *Bridge) Close() error { return nil }
 
 func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, error) {
 	e := d.Event

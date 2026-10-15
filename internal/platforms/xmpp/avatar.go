@@ -106,7 +106,7 @@ func (b *Bridge) publishAvatar(pj jid.JID, av core.File) {
 		return
 	}
 	for _, to := range b.puppetOccupants(pj) {
-		_ = b.write(outPresence{
+		_ = b.write(context.Background(), outPresence{
 			Presence: stanza.Presence{To: to, From: pj},
 			VCard:    &vcardX{Photo: hash},
 		})

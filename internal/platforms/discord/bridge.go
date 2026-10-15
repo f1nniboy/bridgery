@@ -90,7 +90,10 @@ func author(u *discordgo.User, member *discordgo.Member) core.Author {
 	return core.Author{ID: u.ID, Name: name, Avatar: core.File{URL: u.AvatarURL(""), Public: true, Key: u.Avatar}}
 }
 
-func (b *Bridge) Join(core.ChannelSpec) error { return nil }
+func (b *Bridge) Join(context.Context, core.ChannelSpec) error {
+	// TODO: we could check if the channel actually exists/has correct perms
+	return nil
+}
 
 func (b *Bridge) Close() error {
 	if b.session == nil {

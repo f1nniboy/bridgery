@@ -58,8 +58,8 @@ type Bridge interface {
 	Example() Bridge
 	Caps() CapSet
 
-	Open(ctx context.Context) error
-	Join(channel ChannelSpec) error // no-op where joining is implicit
+	Open(ctx context.Context) error                      // ctx lives for the session, cancelled before Close
+	Join(ctx context.Context, channel ChannelSpec) error // returns once joined, ErrPermanent if it never will be
 	Close() error
 
 	Deliver(ctx context.Context, d Delivery) (Receipt, error)

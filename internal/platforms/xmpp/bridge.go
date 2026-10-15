@@ -6,10 +6,10 @@ import (
 	"encoding/xml"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"slices"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"mellium.im/sasl"
@@ -19,7 +19,9 @@ import (
 	"mellium.im/xmpp/dial"
 	"mellium.im/xmpp/jid"
 	"mellium.im/xmpp/stanza"
+	"mellium.im/xmpp/stream"
 
+	"github.com/f1nniboy/bridgery/internal/await"
 	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/span"
@@ -42,15 +44,15 @@ type Bridge struct {
 
 	conn    net.Conn
 	session *xmpp.Session
-	addr    jid.JID // configured jid (component domain or account)
-	self    jid.JID // what we put in outgoing "from"
-	alive   atomic.Bool
+	addr    jid.JID       // configured jid (component domain or account)
+	self    jid.JID       // what we put in outgoing "from"
+	done    chan struct{} // closed when the stream ends
 
 	roomMu sync.Mutex
 	rooms  map[string]*room
 
-	pendingMu sync.Mutex
-	pending   map[string]chan string // origin-id -> stanza-id echo waiter
+	joins  await.Map[string, error]  // room -> join outcome
+	echoes await.Map[string, string] // origin-id -> stanza-id
 
 	avatarMu sync.Mutex
 	avatars  map[string]*puppetAvatar // puppet bare jid -> its published avatar
@@ -84,7 +86,6 @@ func (b *Bridge) Open(ctx context.Context) error {
 	}
 
 	b.rooms = make(map[string]*room)
-	b.pending = make(map[string]chan string)
 	b.avatars = make(map[string]*puppetAvatar)
 
 	if b.isComponent() {
@@ -117,25 +118,47 @@ func (b *Bridge) Open(ctx context.Context) error {
 	}
 	if err != nil {
 		b.conn.Close()
-		return fmt.Errorf("%w: %w", err, core.ErrPermanent) // server rejected our stream
+		return negotiationErr(err)
 	}
 
-	b.alive.Store(true)
-	go b.serve()
-	b.Report(core.Status{Event: core.Ready})
+	b.done = make(chan struct{})
+	go b.serve(ctx, b.done)
 	return nil
 }
 
-func (b *Bridge) Join(ch core.ChannelSpec) error {
+// https://datatracker.ietf.org/doc/html/rfc6120#section-4.9.3
+func negotiationErr(err error) error {
+	if se, ok := errors.AsType[stream.Error](err); ok {
+		switch se.Err {
+		case "connection-timeout", "internal-server-error", "remote-connection-failed", "reset", "resource-constraint", "see-other-host", "system-shutdown":
+			return err
+		}
+		return fmt.Errorf("%w: %w", err, core.ErrPermanent)
+	}
+	if _, ok := errors.AsType[net.Error](err); ok || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.Canceled) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", err, core.ErrPermanent)
+}
+
+func (b *Bridge) Join(ctx context.Context, ch core.ChannelSpec) error {
 	r, err := b.ensureRoom(ch.Name)
 	if err != nil {
 		return err
 	}
-	return b.joinRoom(r, b.self, r.nick, ch.Key, "")
+	failure, err := b.joins.Await(ctx, r.channel, 30*time.Second, func() error {
+		return b.joinRoom(ctx, r, b.self, r.nick, ch.Key, "")
+	})
+	if err != nil {
+		return err
+	}
+	return failure
 }
 
 func (b *Bridge) Close() error {
-	if b.alive.Swap(false) {
+	select {
+	case <-b.done:
+	default:
 		b.leaveAll()
 	}
 	err := b.session.Close()
@@ -143,16 +166,19 @@ func (b *Bridge) Close() error {
 	return err
 }
 
-func (b *Bridge) serve() {
-	err := b.session.Serve(xmpp.HandlerFunc(b.handle))
-	if !b.alive.Swap(false) {
+func (b *Bridge) serve(ctx context.Context, done chan struct{}) {
+	err := b.session.Serve(xmpp.HandlerFunc(func(t xmlstream.TokenReadEncoder, start *xml.StartElement) error {
+		return b.handle(ctx, t, start)
+	}))
+	close(done)
+	if ctx.Err() != nil {
 		return // closed by us
 	}
 	b.Log.Warn("xmpp connection lost", "err", err)
-	b.Report(core.Status{Event: core.Disconnected})
+	b.Report(ctx, core.Status{Event: core.Disconnected})
 }
 
-func (b *Bridge) handle(t xmlstream.TokenReadEncoder, start *xml.StartElement) error {
+func (b *Bridge) handle(ctx context.Context, t xmlstream.TokenReadEncoder, start *xml.StartElement) error {
 	d := xml.NewTokenDecoder(xmlstream.MultiReader(xmlstream.Token(*start), t))
 	switch start.Name.Local {
 	case "message":
@@ -166,7 +192,7 @@ func (b *Bridge) handle(t xmlstream.TokenReadEncoder, start *xml.StartElement) e
 		if err := d.Decode(&p); err != nil {
 			return err
 		}
-		b.onPresence(p)
+		b.onPresence(ctx, p)
 	case "iq":
 		var iq inIQ
 		if err := d.Decode(&iq); err != nil {
@@ -177,7 +203,7 @@ func (b *Bridge) handle(t xmlstream.TokenReadEncoder, start *xml.StartElement) e
 	return nil
 }
 
-func (b *Bridge) onPresence(p inPresence) {
+func (b *Bridge) onPresence(ctx context.Context, p inPresence) {
 	r, ok := b.roomByJID(p.From.Bare().String())
 	if !ok {
 		return
@@ -187,7 +213,10 @@ func (b *Bridge) onPresence(p inPresence) {
 	if p.Type == stanza.ErrorPresence {
 		switch {
 		case nick == r.nick:
-			b.Report(core.Status{Event: core.ChannelDown, Channel: r.channel, Err: joinErr(p.Error.reason(), p.Error.permanent())})
+			err := joinErr(p.Error.reason(), p.Error.permanent())
+			if !b.joins.Resolve(r.channel, err) {
+				b.Report(ctx, core.Status{Event: core.ChannelLost, Channel: r.channel, Err: err})
+			}
 		case b.isComponent() && nick != "":
 			r.dropPuppetByNick(nick)
 		}
@@ -202,7 +231,7 @@ func (b *Bridge) onPresence(p inPresence) {
 		switch {
 		case nick == r.nick: // the bridge bot
 			if removed {
-				b.Report(core.Status{Event: core.ChannelDown, Channel: r.channel, Err: joinErr(fmt.Sprintf("muc status %d", code), permanent)})
+				b.Report(ctx, core.Status{Event: core.ChannelLost, Channel: r.channel, Err: joinErr(fmt.Sprintf("muc status %d", code), permanent)})
 			}
 		case b.isComponent() && removed: // our puppet
 			r.dropPuppetByNick(nick)
@@ -212,7 +241,7 @@ func (b *Bridge) onPresence(p inPresence) {
 		return
 	}
 	if nick == r.nick && p.MUC.selfJoined() {
-		b.Report(core.Status{Event: core.ChannelUp, Channel: r.channel})
+		b.joins.Resolve(r.channel, nil)
 	}
 	r.setOccupant(nick, true)
 	if p.VCard == nil || r.owns(nick) {
@@ -250,7 +279,7 @@ func (b *Bridge) onMessage(m inMessage) {
 	sid := m.stanzaID(r.jid)
 
 	// for echo, so we know the ID of our messages
-	if m.OriginID.ID != "" && b.deliverEcho(m.OriginID.ID, sid) {
+	if m.OriginID.ID != "" && b.echoes.Resolve(m.OriginID.ID, sid) {
 		return
 	}
 	if r.owns(nick) {
@@ -313,26 +342,12 @@ func (b *Bridge) onIQ(t xmlstream.TokenReadEncoder, iq inIQ) error {
 	return err
 }
 
-func (b *Bridge) deliverEcho(oid, sid string) bool {
-	b.pendingMu.Lock()
-	ch, ok := b.pending[oid]
-	b.pendingMu.Unlock()
-	if !ok {
-		return false
-	}
-	select {
-	case ch <- sid:
-	default:
-	}
-	return true
-}
-
 func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, error) {
 	r, err := b.ensureRoom(d.Dest.Channel)
 	if err != nil {
 		return core.Receipt{}, err
 	}
-	from, err := b.sender(r, d.Event)
+	from, err := b.sender(ctx, r, d.Event)
 	if err != nil {
 		return core.Receipt{}, err
 	}
@@ -374,8 +389,8 @@ func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, er
 	return core.Receipt{}, nil
 }
 
-func (b *Bridge) write(v any) error {
-	ctx, cancel := context.WithTimeout(context.Background(), writeTimeout)
+func (b *Bridge) write(ctx context.Context, v any) error {
+	ctx, cancel := context.WithTimeout(ctx, writeTimeout)
 	defer cancel()
 	return b.session.Encode(ctx, v)
 }
@@ -383,27 +398,10 @@ func (b *Bridge) write(v any) error {
 func (b *Bridge) send(ctx context.Context, msg outMessage) (string, error) {
 	oid := string(core.NewID())
 	msg.OriginID = &originID{ID: oid}
-
-	ch := make(chan string, 1)
-	b.pendingMu.Lock()
-	b.pending[oid] = ch
-	b.pendingMu.Unlock()
-	defer func() {
-		b.pendingMu.Lock()
-		delete(b.pending, oid)
-		b.pendingMu.Unlock()
-	}()
-
-	if err := b.session.Encode(ctx, msg); err != nil {
-		return "", err
-	}
-	wait, cancel := context.WithTimeout(ctx, echoTimeout)
-	defer cancel()
-	select {
-	case id := <-ch:
-		return id, nil
-	case <-wait.Done():
+	id, err := b.echoes.Await(ctx, oid, echoTimeout, func() error { return b.session.Encode(ctx, msg) })
+	if errors.Is(err, await.ErrTimeout) {
 		b.Log.Warn("xmpp echo timeout", "origin_id", oid)
 		return "", nil
 	}
+	return id, err
 }

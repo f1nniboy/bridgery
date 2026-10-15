@@ -1,6 +1,9 @@
 package core
 
-import "log/slog"
+import (
+	"context"
+	"log/slog"
+)
 
 type Common struct {
 	inboundCh chan Inbound
@@ -26,8 +29,14 @@ func (c *Common) Inbound() <-chan Inbound {
 	return c.inboundCh
 }
 
-func (c *Common) Report(m Status) {
-	c.statusCh <- m
+func (c *Common) Report(ctx context.Context, m Status) {
+	if ctx.Err() != nil {
+		return
+	}
+	select {
+	case c.statusCh <- m:
+	case <-ctx.Done():
+	}
 }
 
 func (c *Common) Status() <-chan Status {

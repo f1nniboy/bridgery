@@ -29,7 +29,9 @@ func (r *Router) manage(ctx context.Context, account string, ch <-chan core.Stat
 			return
 		}
 
-		if err := acc.open(ctx); err != nil {
+		session, end := context.WithCancel(ctx)
+		if err := acc.open(session); err != nil {
+			end()
 			if errors.Is(err, core.ErrPermanent) {
 				r.log.Error("connect failed, giving up", "account", account, "err", err)
 				return
@@ -40,14 +42,44 @@ func (r *Router) manage(ctx context.Context, account string, ch <-chan core.Stat
 		}
 		r.log.Info("connected", "account", account)
 
-		if !r.supervise(ctx, account, ch) {
+		m := newMembership(session, acc.Bridge, r.log.With("account", account))
+		up := r.supervise(session, m, account, ch)
+		end()
+		m.stop()
+		if !up {
 			<-drained
 			r.close(account)
 			return
 		}
 		r.close(account)
+		for len(ch) > 0 {
+			<-ch
+		}
 		delay = minBackoff
 		r.log.Warn("disconnected, reconnecting", "account", account, "in", delay)
+	}
+}
+
+func (r *Router) supervise(ctx context.Context, m *membership, account string, ch <-chan core.Status) bool {
+	for _, spec := range r.channels[account] {
+		m.add(spec)
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		case name := <-m.retry:
+			m.join(name)
+		case f := <-m.failed:
+			m.down(f.name, f.err)
+		case st := <-ch:
+			switch st.Event {
+			case core.ChannelLost:
+				m.down(st.Channel, st.Err)
+			case core.Disconnected:
+				return true
+			}
+		}
 	}
 }
 
@@ -62,85 +94,4 @@ func nextBackoff(d time.Duration) time.Duration {
 		return minBackoff
 	}
 	return min(2*d, maxBackoff)
-}
-
-type chanRetry struct {
-	spec  core.ChannelSpec
-	delay time.Duration
-	timer *time.Timer
-}
-
-func (s *chanRetry) stop() {
-	if s.timer != nil {
-		s.timer.Stop()
-	}
-}
-
-func (r *Router) supervise(ctx context.Context, account string, ch <-chan core.Status) bool {
-	b := r.accounts[account].Bridge
-	states := map[string]*chanRetry{}
-	retry := make(chan string, len(r.channels[account])+1)
-	defer func() {
-		for _, s := range states {
-			s.stop()
-		}
-	}()
-
-	down := func(name string, err error) {
-		s := states[name]
-		if s == nil { // not desired, or already given up
-			return
-		}
-		s.stop()
-		if errors.Is(err, core.ErrPermanent) {
-			delete(states, name)
-			r.log.Error("channel down, giving up", "account", account, "channel", name, "err", err)
-			return
-		}
-		s.delay = nextBackoff(s.delay)
-		r.log.Warn("channel down, retrying", "account", account, "channel", name, "err", err, "in", s.delay)
-		s.timer = time.AfterFunc(s.delay, func() {
-			select {
-			case retry <- name:
-			default:
-			}
-		})
-	}
-	join := func(s *chanRetry) {
-		if err := b.Join(s.spec); err != nil {
-			down(s.spec.Name, err)
-		}
-	}
-
-	for {
-		select {
-		case <-ctx.Done():
-			return false
-		case name := <-retry:
-			if s := states[name]; s != nil {
-				join(s)
-			}
-		case m := <-ch:
-			switch m.Event {
-			case core.Ready:
-				for _, s := range states {
-					s.stop()
-				}
-				for _, spec := range r.channels[account] {
-					s := &chanRetry{spec: spec}
-					states[spec.Name] = s
-					join(s)
-				}
-			case core.ChannelUp:
-				if s := states[m.Channel]; s != nil {
-					s.stop()
-					s.delay = 0 // successful, so reset backoff
-				}
-			case core.ChannelDown:
-				down(m.Channel, m.Err)
-			case core.Disconnected:
-				return true
-			}
-		}
-	}
 }

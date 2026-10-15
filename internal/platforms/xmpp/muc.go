@@ -1,8 +1,7 @@
 package xmpp
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -190,9 +189,9 @@ func (b *Bridge) puppetOccupants(pj jid.JID) []jid.JID {
 	return out
 }
 
-func (b *Bridge) sender(r *room, ev core.Event) (jid.JID, error) {
+func (b *Bridge) sender(ctx context.Context, r *room, ev core.Event) (jid.JID, error) {
 	if b.isComponent() {
-		return b.ensurePuppet(r, ev)
+		return b.ensurePuppet(ctx, r, ev)
 	}
 	return b.addr, nil
 }
@@ -204,18 +203,18 @@ func (b *Bridge) occupantNick(a core.Author) string {
 	return b.botNick()
 }
 
-func (b *Bridge) ensurePuppet(r *room, ev core.Event) (jid.JID, error) {
-	key := ev.Origin.Account + "\x00" + ev.Author.ID
+func (b *Bridge) ensurePuppet(ctx context.Context, r *room, ev core.Event) (jid.JID, error) {
+	key := ev.PuppetID()
 
 	pj, ok := r.puppetJID(key)
 	if !ok {
 		var err error
-		if pj, err = jid.New(shortHash(key), b.addr.Domainpart(), ""); err != nil {
+		if pj, err = jid.New(key, b.addr.Domainpart(), ""); err != nil {
 			return jid.JID{}, err
 		}
 		p := r.addPuppet(key, pj, puppetNick(ev.Author))
 		av, _ := b.avatar(pj)
-		if err := b.joinRoom(r, pj, p.nick, "", av.hash); err != nil {
+		if err := b.joinRoom(ctx, r, pj, p.nick, "", av.hash); err != nil {
 			r.dropPuppet(key)
 			return jid.JID{}, err
 		}
@@ -226,7 +225,7 @@ func (b *Bridge) ensurePuppet(r *room, ev core.Event) (jid.JID, error) {
 	return pj, nil
 }
 
-func (b *Bridge) joinRoom(r *room, from jid.JID, nick, key, photo string) error {
+func (b *Bridge) joinRoom(ctx context.Context, r *room, from jid.JID, nick, key, photo string) error {
 	to, err := r.jid.WithResource(nick)
 	if err != nil {
 		return err
@@ -238,7 +237,7 @@ func (b *Bridge) joinRoom(r *room, from jid.JID, nick, key, photo string) error 
 	if photo != "" {
 		pres.VCard = &vcardX{Photo: photo}
 	}
-	return b.write(pres)
+	return b.write(ctx, pres)
 }
 
 func (b *Bridge) botNick() string {
@@ -267,7 +266,7 @@ func (b *Bridge) leaveRoom(roomJID jid.JID, nick string, from jid.JID) {
 	if err != nil {
 		return
 	}
-	_ = b.write(outPresence{
+	_ = b.write(context.Background(), outPresence{
 		Presence: stanza.Presence{To: to, From: from, Type: stanza.UnavailablePresence},
 	})
 }
@@ -291,9 +290,4 @@ func sanitizeNick(nick string) string {
 		return "unknown"
 	}
 	return out
-}
-
-func shortHash(v string) string {
-	sum := sha1.Sum([]byte(v))
-	return hex.EncodeToString(sum[:])[:12]
 }

@@ -8,14 +8,12 @@ type ChannelSpec struct {
 type StatusEvent uint8
 
 const (
-	Ready        StatusEvent = iota // account connected, ready to receive Join() calls
-	Disconnected                    // session dead, gateway re-Opens
-	ChannelUp                       // confirmed joined a channel
-	ChannelDown                     // not in a desired channel
+	Disconnected StatusEvent = iota // session dead, gateway re-Opens
+	ChannelLost                     // removed from channel, gateway re-Joins
 )
 
 type Status struct {
 	Event   StatusEvent
-	Channel string // for ChannelUp / ChannelDown
-	Err     error  // for ChannelDown, ErrPermanent gives up
+	Channel string // for ChannelLost
+	Err     error  // for ChannelLost, ErrPermanent gives up
 }
