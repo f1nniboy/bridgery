@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"testing"
 
 	"github.com/f1nniboy/bridgery/internal/span"
@@ -62,5 +63,19 @@ func TestCapSetWithout(t *testing.T) {
 	}
 	if !c.Has(CapReply) {
 		t.Error("Without mutated the original set")
+	}
+}
+
+func TestLazyFile(t *testing.T) {
+	f := File{Fetch: func(context.Context) ([]byte, error) { return []byte("x"), nil }}
+	if f.Empty() {
+		t.Error("lazy file reported empty")
+	}
+	if b, err := f.Bytes(context.Background()); err != nil || string(b) != "x" {
+		t.Errorf("Bytes: %q, %v", b, err)
+	}
+	m := Message{Author: Author{Avatar: f}, Files: []File{f}}.WithoutData()
+	if m.Author.Avatar.Fetch != nil || m.Files[0].Fetch != nil {
+		t.Error("WithoutData kept Fetch")
 	}
 }

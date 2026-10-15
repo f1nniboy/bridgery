@@ -69,8 +69,7 @@ func (r *Router) deliver(ctx context.Context, dst core.Address, ev core.Event) {
 }
 
 func (r *Router) resolveFiles(ctx context.Context, ev core.Event, dst core.Address, caps core.CapSet) core.Event {
-	// platforms with CapMedia use .Bytes() so they won't ever need
-	// the media proxy
+	// platforms with CapMedia use .Bytes() so they don't need the media proxy
 	if caps.Has(core.CapMedia) || len(ev.Files) == 0 {
 		return ev
 	}
@@ -86,7 +85,7 @@ func (r *Router) resolveFiles(ctx context.Context, ev core.Event, dst core.Addre
 			r.log.Warn("media resolve: empty url, dropping file", "dst", dst, "file", f.Name)
 			continue
 		}
-		f.URL, f.Public, f.Data, f.Key = url, true, nil, ""
+		f.URL, f.Public, f.Data, f.Fetch, f.Key = url, true, nil, nil, ""
 		out = append(out, f)
 	}
 

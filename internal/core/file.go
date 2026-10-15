@@ -14,14 +14,19 @@ type File struct {
 	Public bool   `json:"public,omitzero" luar:"public"` // url is safe to hand to other platforms
 	Key    string `json:"key,omitzero" luar:"key"`
 	Data   []byte `json:"-" luar:"-"` // inline bytes if no url
+
+	Fetch func(context.Context) ([]byte, error) `json:"-" luar:"-"` // lazy bytes if no url or data, requires key
 }
 
-func (f File) Empty() bool { return f.URL == "" && len(f.Data) == 0 }
+func (f File) Empty() bool { return f.URL == "" && len(f.Data) == 0 && f.Fetch == nil }
 
 func (f File) Bytes(ctx context.Context) ([]byte, error) {
 	if f.URL == "" {
 		if len(f.Data) > 0 {
 			return f.Data, nil
+		}
+		if f.Fetch != nil {
+			return f.Fetch(ctx)
 		}
 		return nil, fmt.Errorf("file %q has no source", f.Name)
 	}

@@ -17,7 +17,7 @@ func (a Author) Display() string {
 	if a.Name != "" {
 		return a.Name
 	}
-	return a.ID // TODO: kind of bad?
+	return a.ID // TODO: kind of a bad fallback?
 }
 
 type Message struct {
@@ -27,11 +27,11 @@ type Message struct {
 }
 
 func (m Message) WithoutData() Message {
-	m.Author.Avatar.Data = nil
+	m.Author.Avatar.Data, m.Author.Avatar.Fetch = nil, nil
 	if len(m.Files) > 0 {
 		files := slices.Clone(m.Files)
 		for i := range files {
-			files[i].Data = nil
+			files[i].Data, files[i].Fetch = nil, nil
 		}
 		m.Files = files
 	}

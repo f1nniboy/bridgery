@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net/http"
 	"time"
 
 	"golang.org/x/sync/singleflight"
@@ -59,9 +61,11 @@ func (r *resolver) URL(ctx context.Context, f core.File) (string, error) {
 		key, flight = hashHex([]byte(f.Key)), "k:"+f.Key
 	case f.URL != "":
 		flight = "u:" + f.URL
-	default:
+	case len(f.Data) > 0:
 		key = hashHex(f.Data)
 		flight = "b:" + key
+	default:
+		return "", fmt.Errorf("file %q has no key", f.Name)
 	}
 
 	ch := r.group.DoChan(flight, func() (any, error) {
@@ -101,7 +105,11 @@ func (r *resolver) host(ctx context.Context, f core.File, key string) (string, e
 		}
 		data = b
 	}
-	return r.backend.Put(ctx, key, f.Name, f.MIME, data)
+	mime := f.MIME
+	if mime == "" {
+		mime = http.DetectContentType(data)
+	}
+	return r.backend.Put(ctx, key, f.Name, mime, data)
 }
 
 func hashHex(b []byte) string {
