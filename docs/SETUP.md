@@ -31,9 +31,9 @@ A channel can also be one-directional with `mode`:
 
 | `mode` | meaning |
 | --- | --- |
-| `inout` (default) | relays both ways |
-| `in` | messages sent here are relayed out, but nothing is relayed into this channel |
-| `out` | this channel receives from others, but messages sent here are never relayed |
+| `both` (default) | relays both ways |
+| `send` | messages sent here are relayed out, but nothing is relayed into this channel |
+| `receive` | this channel receives from others, but messages sent here are never relayed |
 
 ## 3. A minimal example: Discord & IRC
 

@@ -25,7 +25,7 @@ func TestBuildRoutes(t *testing.T) {
 		return config.Channel{Account: a.Account, Channel: a.Channel, Mode: mode}
 	}
 	routes := buildRoutes([]config.Gateway{
-		{Channels: []config.Channel{ch(discord, ""), ch(irc, "in"), ch(xmpp, "out")}},
+		{Channels: []config.Channel{ch(discord, ""), ch(irc, "send"), ch(xmpp, "receive")}},
 		{Channels: []config.Channel{ch(discord, ""), ch(xmpp, "")}},
 	})
 

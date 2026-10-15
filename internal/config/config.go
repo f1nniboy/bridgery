@@ -38,7 +38,7 @@ type Gateway struct {
 type Channel struct {
 	Account string `toml:"account"`
 	Channel string `toml:"channel"`
-	Mode    string `toml:"mode,commented" comment:"in: write-only, messages are never relayed here\nout: read-only, messages sent here are never relayed\ninout (default): normal"`
+	Mode    string `toml:"mode,commented" comment:"send: only relays messages from this channel\nreceive: only relays messages into this channel\nboth (default): relays both ways"`
 
 	Key Secret `toml:"key,commented" comment:"bridge-specific join secret (e.g. IRC)"`
 }
@@ -47,8 +47,8 @@ func (c Channel) Address() core.Address {
 	return core.Address{Account: c.Account, Channel: c.Channel}
 }
 
-func (c Channel) Sources() bool  { return c.Mode != "out" }
-func (c Channel) Receives() bool { return c.Mode != "in" }
+func (c Channel) Sends() bool    { return c.Mode != "receive" }
+func (c Channel) Receives() bool { return c.Mode != "send" }
 
 type Duration time.Duration
 
@@ -96,8 +96,8 @@ func Load(path string) (Config, error) {
 
 func Decode(r io.Reader, v any) error {
 	err := toml.NewDecoder(r).EnableUnmarshalerInterface().DisallowUnknownFields().Decode(v)
-	var strict *toml.StrictMissingError
-	if !errors.As(err, &strict) {
+	strict, ok := errors.AsType[*toml.StrictMissingError](err)
+	if !ok {
 		return err
 	}
 	keys := make([]string, len(strict.Errors))
@@ -117,7 +117,7 @@ func (c Config) Validate() error {
 	for _, gw := range c.Gateways {
 		for _, ch := range gw.Channels {
 			switch ch.Mode {
-			case "", "in", "out", "inout":
+			case "", "send", "receive", "both":
 			default:
 				return fmt.Errorf("config: channel %s/%s: unknown mode %q", ch.Account, ch.Channel, ch.Mode)
 			}

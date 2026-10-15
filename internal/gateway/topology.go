@@ -13,7 +13,7 @@ func buildRoutes(defs []config.Gateway) map[core.Address][]core.Address {
 			for _, to := range gw.Channels {
 				src, dst := from.Address(), to.Address()
 				pair := [2]core.Address{src, dst}
-				if src == dst || !from.Sources() || !to.Receives() || seen[pair] {
+				if src == dst || !from.Sends() || !to.Receives() || seen[pair] {
 					continue
 				}
 				seen[pair] = true

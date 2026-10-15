@@ -20,9 +20,9 @@
 [[gateways.channels]]
 account = 'discord.main'
 channel = '123456789012345678'
-# in: write-only, messages are never relayed here
-# out: read-only, messages sent here are never relayed
-# inout (default): normal
+# send: only relays messages from this channel
+# receive: only relays messages into this channel
+# both (default): relays both ways
 # mode = ''
 # bridge-specific join secret (e.g. IRC)
 # key = ''
@@ -30,9 +30,9 @@ channel = '123456789012345678'
 [[gateways.channels]]
 account = 'irc.libera'
 channel = '#mychannel'
-# in: write-only, messages are never relayed here
-# out: read-only, messages sent here are never relayed
-# inout (default): normal
+# send: only relays messages from this channel
+# receive: only relays messages into this channel
+# both (default): relays both ways
 # mode = ''
 # bridge-specific join secret (e.g. IRC)
 # key = ''
