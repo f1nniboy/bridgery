@@ -9,5 +9,7 @@
   - [Setup](discord/SETUP.md)
 - **[IRC](irc)**
   - [Setup](irc/SETUP.md)
+- **[Matrix](matrix)**
+  - [Setup](matrix/SETUP.md)
 - **[XMPP](xmpp)**
   - [Setup](xmpp/SETUP.md)

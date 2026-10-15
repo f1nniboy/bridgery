@@ -6,9 +6,9 @@ They are how bridgery does *presentation*: the core only moves structured messag
 
 ## Why?
 
-This is a pretty big difference from most bridges. Where others allow you to change formatting using config options (a nick-format string, a pile of toggles), bridgery keeps all of it in hooks you can read and edit, so you're never stuck with an opinionated default someone chose.
+This is a pretty big difference from most bridges. While others allow you to change formatting using config options (a nick-format string, a pile of toggles), bridgery keeps all of it in hooks you can read and edit, so you're never stuck with an opinionated default.
 
-The tradeoff is that first-time setup is a little more involved: a fresh bridge does nothing to your messages until you enable hooks, so copying the examples in is a normal first step rather than getting a pre-configured look out of the box.
+The tradeoff is that first-time setup is a little more involved: a fresh bridge does nothing to your messages until you enable hooks, so copying the examples in is a normal, almost must-have, step rather than getting a pre-configured look out of the box.
 
 ## Enabling them
 
