@@ -25,8 +25,6 @@ dir = 'hooks'
 
 In the Docker image, mount it and use its path: uncomment the mount line in `docker-compose.yml` and set the above config option.
 
-The directory is watched: edit, add, or remove a `.lua` file and it reloads live, no restart. A script with an error is logged and skipped, and the previous version stays active.
-
 ## Editor autocomplete
 
 Open `hooks/` in an editor with the Lua language server for autocomplete and type checking.
@@ -67,3 +65,7 @@ on("deliver", function(ev, dst)
     end
 end)
 ```
+
+## Limitations
+
+Hooks only rewrite or drop messages. They can't send new messages or reply to commands, so bridgery is not a generic framework.
