@@ -5,8 +5,22 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 
+	"github.com/f1nniboy/bridgery/internal/core"
 	"github.com/f1nniboy/bridgery/internal/span"
 )
+
+func extract(m *discordgo.Message) (span.Spans, []core.File) {
+	content := toSpans(m)
+	files := attachments(m)
+	for _, s := range m.MessageSnapshots {
+		if s.Message == nil {
+			continue
+		}
+		content = append(content, toSpans(s.Message)...)
+		files = append(files, attachments(s.Message)...)
+	}
+	return content, files
+}
 
 var reMention = regexp.MustCompile(`<@!?(\d+)>`)
 

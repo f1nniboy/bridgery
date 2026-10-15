@@ -12,7 +12,6 @@ import (
 
 	"github.com/f1nniboy/bridgery/internal/config"
 	"github.com/f1nniboy/bridgery/internal/core"
-	"github.com/f1nniboy/bridgery/internal/span"
 )
 
 type Bridge struct {
@@ -55,8 +54,7 @@ func (b *Bridge) Open(ctx context.Context) error {
 	s.AddHandler(b.onDelete)
 
 	if err := s.Open(); err != nil {
-		var ce *websocket.CloseError
-		if errors.As(err, &ce) && slices.Contains(permCloseCodes, ce.Code) {
+		if ce, ok := errors.AsType[*websocket.CloseError](err); ok && slices.Contains(permCloseCodes, ce.Code) {
 			return fmt.Errorf("%w: %w", err, core.ErrPermanent)
 		}
 		return err
@@ -211,19 +209,4 @@ func (b *Bridge) Deliver(ctx context.Context, d core.Delivery) (core.Receipt, er
 		return core.Receipt{}, nil
 	}
 	return core.Receipt{}, nil
-}
-
-func extract(m *discordgo.Message) (span.Spans, []core.File) {
-	content := toSpans(m)
-	files := attachments(m)
-	for _, s := range m.MessageSnapshots {
-		if s.Message == nil {
-			continue
-		}
-		if fwd := toSpans(s.Message); len(fwd) > 0 {
-			content = append(content, fwd...)
-		}
-		files = append(files, attachments(s.Message)...)
-	}
-	return content, files
 }
